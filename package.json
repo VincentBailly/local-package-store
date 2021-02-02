@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "description": "Install a dependency graph on disk.",
   "main": "index.js",
-  "scripts": {
-  },
+  "scripts": {},
   "author": "vincent.bailly@microsoft.com",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^4.1.3"
+  }
 }
