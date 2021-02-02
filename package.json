@@ -1,0 +1,10 @@
+{
+  "name": "local-package-store",
+  "version": "1.0.0",
+  "description": "Install a dependency graph on disk.",
+  "main": "index.js",
+  "scripts": {
+  },
+  "author": "vincent.bailly@microsoft.com",
+  "license": "MIT"
+}
