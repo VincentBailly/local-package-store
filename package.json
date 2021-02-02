@@ -4,6 +4,7 @@
   "description": "Install a dependency graph on disk.",
   "main": "index.js",
   "scripts": {
+    "build": "tsc",
     "test": "jest"
   },
   "author": "vincent.bailly@microsoft.com",
