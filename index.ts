@@ -1,15 +1,13 @@
 import * as fs from "fs";
 import * as path from "path";
 
-export type Args = {
-    /**
-     * Absolute path to an empty directory.
-     */
-    location: string;
-}
-
-export function installLocalStore(args: Args) {
-    const locationError = getLocationError(args.location);
+/**
+ * Install the given dependency graph in the given folder.
+ * 
+ * @param location Absolute path of an empty directory in which the installation will take place.
+ */
+export function installLocalStore(location: string) {
+    const locationError = getLocationError(location);
     if (locationError !== undefined) {
         throw new Error(locationError);
     }

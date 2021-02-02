@@ -10,27 +10,27 @@ it("finds the function", () => {
 describe("input validation", () => {
     describe("location", () => {
         it("throws if the location is a relative path", () => {
-            expect(() => installLocalStore({ location: "myDir" })).toThrowError(`Location is not an absolute path: "myDir"`);
+            expect(() => installLocalStore("myDir")).toThrowError(`Location is not an absolute path: "myDir"`);
         })
         it("reports the wrong path in the error when a relative path is passed", () => {
-            expect(() => installLocalStore({ location: "fooBar" })).toThrowError(`Location is not an absolute path: "fooBar"`);
+            expect(() => installLocalStore("fooBar")).toThrowError(`Location is not an absolute path: "fooBar"`);
         })
         
         it("throws if location points to a file", () => {
             const dir = directory();
             const filePath = path.join(dir, "file");
             fs.writeFileSync(filePath, "");
-            expect(() => installLocalStore({ location: filePath})).toThrowError(`Location is not a directory: "${filePath}"`);
+            expect(() => installLocalStore(filePath)).toThrowError(`Location is not a directory: "${filePath}"`);
         })
         it("throws if location does not exist", () => {
             const dir = directory();
             const notExistentDir = path.join(dir, "foo");
-            expect(() => installLocalStore({ location:notExistentDir })).toThrowError(`Location does not exist: "${notExistentDir}"`);
+            expect(() => installLocalStore(notExistentDir)).toThrowError(`Location does not exist: "${notExistentDir}"`);
         })
         it("throws if location is not empty", () => {
             const dir = directory();
             fs.writeFileSync(path.join(dir, "a-file"), "");
-            expect(() => installLocalStore({ location: dir })).toThrowError(`Location is not an empty directory: "${dir}"`);
+            expect(() => installLocalStore(dir)).toThrowError(`Location is not an empty directory: "${dir}"`);
         })
     })
 })

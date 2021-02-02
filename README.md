@@ -17,10 +17,10 @@ const dependencyGraph = {
     links: [{ source: "1", target: "2"}]
 }
 
-installLocalStore({
+installLocalStore(
     location,
     dependencyGraph
-}).then(() => {
+).then(() => {
     /* Installation is done */
 })
 ```
