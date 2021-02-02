@@ -4,7 +4,7 @@ Usage:
 ```javascript
 const { installLocalStore } = require("local-package-store");
 
-const location = "some location on disk";
+const location = "<path to an empty folder>";
 const dependencyGraph = {
     nodes: [{
         key: "1",
