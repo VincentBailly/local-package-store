@@ -18,8 +18,8 @@ const dependencyGraph = {
 }
 
 installLocalStore(
-    location,
-    dependencyGraph
+    dependencyGraph,
+    location
 ).then(() => {
     /* Installation is done */
 })
