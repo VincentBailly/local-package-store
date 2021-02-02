@@ -3,10 +3,15 @@
   "version": "1.0.0",
   "description": "Install a dependency graph on disk.",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "test": "jest"
+  },
   "author": "vincent.bailly@microsoft.com",
   "license": "MIT",
   "devDependencies": {
+    "@types/jest": "^26.0.20",
+    "jest": "^26.6.3",
+    "ts-jest": "^26.5.0",
     "typescript": "^4.1.3"
   }
 }
