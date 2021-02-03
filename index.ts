@@ -47,6 +47,17 @@ export async function installLocalStore(graph: Graph, location: string): Promise
     validateInput(graph, location);
 
     await installNodesInStore(graph, location);
+
+    await linkNodes(graph, location);
+}
+
+async function linkNodes(graph: Graph, location: string): Promise<void> {
+    await Promise.all(graph.links.map(async link => {
+        // TODO: this is very bad for perf, improve this.
+        const name = graph.nodes.find(n => n.key === link.target)!.name;
+        await fs.promises.mkdir(path.join(location, link.source, "node_modules"));
+        await fs.promises.symlink(path.join(location, link.target), path.join(location, link.source, "node_modules", name), "junction");
+    }))
 }
 
 async function installNodesInStore(graph: Graph, location: string): Promise<void> {

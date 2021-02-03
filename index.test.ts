@@ -183,6 +183,27 @@ describe("happy path", () => {
       'console.log("foo")'
     );
   });
+  it("Links packages as specified in the graph", async () => {
+    const store = directory();
+    const foo = directory();
+    fs.writeFileSync(path.join(foo, "foo.js"), 'console.log("foo")');
+    const bar = directory();
+    fs.writeFileSync(path.join(bar, "bar.js"), 'console.log("bar")');
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: foo },
+        { key: "barkey", name: "bar", location: bar },
+      ],
+      links: [{ source: "fookey", target: "barkey" }],
+    };
+
+    await installLocalStore(graph, store);
+
+    expect(fs.readFileSync(path.join(store, "fookey", "node_modules", "bar", "bar.js")).toString()).toBe(
+      'console.log("bar")'
+    );
+  });
 });
 
 /**
@@ -190,10 +211,8 @@ describe("happy path", () => {
  * - Validation:
  *   - names are valid package names
  * - Scenarios:
- *   - empty nodes and empty links
- *   - packages have nested folders
- *   - a few nodes but no links
  *   - several nodes have same name
+ *   - one node has a dependency to two nodes that have the same name.
  *   - package contains invalid files
  *   - a few nodes and a few links
  *   - a package name has a namespace
