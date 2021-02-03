@@ -53,12 +53,22 @@ async function installNodesInStore(graph: Graph, location: string): Promise<void
     await Promise.all(graph.nodes.map(async n => {
         const key = n.key;
         const nodeLoc = n.location;
-        fs.mkdirSync(path.join(location, key));
-        const files = fs.readdirSync(nodeLoc);
-        await Promise.all(files.map(async f => {
-            fs.copyFileSync(path.join(nodeLoc, f), path.join(location, key, f));
-        }))
+        await fs.promises.mkdir(path.join(location, key));
+        await copyDir(nodeLoc, path.join(location, key))
     }))
+}
+
+async function copyDir(source: string, destination: string): Promise<void> {
+        const entries = fs.readdirSync(source);
+        await Promise.all(entries.map(async e => {
+            const stats = await fs.promises.stat(path.join(source, e));
+            if (stats.isDirectory()) {
+                await fs.promises.mkdir(path.join(destination, e));
+                await copyDir(path.join(source, e), path.join(destination, e))
+            } else if (stats.isFile()) {
+                await fs.promises.copyFile(path.join(source, e), path.join(destination, e));
+            }
+        }))
 }
 
 function validateInput(graph: Graph, location: string): void {

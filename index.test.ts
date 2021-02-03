@@ -164,6 +164,25 @@ describe("happy path", () => {
       'console.log("bar")'
     );
   });
+  it("Installs packages having nested folders", async () => {
+    const store = directory();
+    const foo = directory();
+    fs.mkdirSync(path.join(foo, "bar"));
+    fs.writeFileSync(path.join(foo, "bar", "foo.js"), 'console.log("foo")');
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: foo }
+      ],
+      links: [],
+    };
+
+    await installLocalStore(graph, store);
+
+    expect(fs.readFileSync(path.join(store, "fookey", "bar", "foo.js")).toString()).toBe(
+      'console.log("foo")'
+    );
+  });
 });
 
 /**
@@ -175,6 +194,7 @@ describe("happy path", () => {
  *   - packages have nested folders
  *   - a few nodes but no links
  *   - several nodes have same name
+ *   - package contains invalid files
  *   - a few nodes and a few links
  *   - a package name has a namespace
  *   - a package with a namespace name has a bin field which is a string
