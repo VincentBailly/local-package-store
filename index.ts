@@ -14,6 +14,10 @@ export type Graph = {
      */
     key: string;
     /**
+     * Name of the node.
+     */
+    name: string;
+    /**
      * Absolute path to a folder where the content of this node is stored.
      */
     location: string;
@@ -39,15 +43,33 @@ export type Graph = {
  * @param graph Dependency graph to be installed on disk.
  * @param location Absolute path of an empty directory in which the installation will take place.
  */
-export function installLocalStore(graph: Graph, location: string) {
-  const locationError = getLocationError(location);
-  if (locationError !== undefined) {
-    throw new Error(locationError);
-  }
-  const GrapError = getGraphError(graph);
-  if (GrapError !== undefined) {
-    throw new Error(GrapError);
-  }
+export async function installLocalStore(graph: Graph, location: string): Promise<void> {
+    validateInput(graph, location);
+
+    await installNodesInStore(graph, location);
+}
+
+async function installNodesInStore(graph: Graph, location: string): Promise<void> {
+    await Promise.all(graph.nodes.map(async n => {
+        const key = n.key;
+        const nodeLoc = n.location;
+        fs.mkdirSync(path.join(location, key));
+        const files = fs.readdirSync(nodeLoc);
+        await Promise.all(files.map(async f => {
+            fs.copyFileSync(path.join(nodeLoc, f), path.join(location, key, f));
+        }))
+    }))
+}
+
+function validateInput(graph: Graph, location: string): void {
+    const locationError = getLocationError(location);
+    if (locationError !== undefined) {
+      throw new Error(locationError);
+    }
+    const GrapError = getGraphError(graph);
+    if (GrapError !== undefined) {
+      throw new Error(GrapError);
+    }
 }
 
 function getGraphError(graph: Graph): string | undefined {
