@@ -43,54 +43,73 @@ export type Graph = {
  * @param graph Dependency graph to be installed on disk.
  * @param location Absolute path of an empty directory in which the installation will take place.
  */
-export async function installLocalStore(graph: Graph, location: string): Promise<void> {
-    validateInput(graph, location);
+export async function installLocalStore(
+  graph: Graph,
+  location: string
+): Promise<void> {
+  validateInput(graph, location);
 
-    await installNodesInStore(graph, location);
+  await installNodesInStore(graph, location);
 
-    await linkNodes(graph, location);
+  await linkNodes(graph, location);
 }
 
 async function linkNodes(graph: Graph, location: string): Promise<void> {
-    await Promise.all(graph.links.map(async link => {
-        // TODO: this is very bad for perf, improve this.
-        const name = graph.nodes.find(n => n.key === link.target)!.name;
-        await fs.promises.mkdir(path.join(location, link.source, "node_modules"));
-        await fs.promises.symlink(path.join(location, link.target), path.join(location, link.source, "node_modules", name), "junction");
-    }))
+  await Promise.all(
+    graph.links.map(async (link) => {
+      // TODO: this is very bad for perf, improve this.
+      const name = graph.nodes.find((n) => n.key === link.target)!.name;
+      await fs.promises.mkdir(path.join(location, link.source, "node_modules"));
+      await fs.promises.symlink(
+        path.join(location, link.target),
+        path.join(location, link.source, "node_modules", name),
+        "junction"
+      );
+    })
+  );
 }
 
-async function installNodesInStore(graph: Graph, location: string): Promise<void> {
-    await Promise.all(graph.nodes.map(async n => {
-        const key = n.key;
-        const nodeLoc = n.location;
-        await fs.promises.mkdir(path.join(location, key));
-        await copyDir(nodeLoc, path.join(location, key))
-    }))
+async function installNodesInStore(
+  graph: Graph,
+  location: string
+): Promise<void> {
+  await Promise.all(
+    graph.nodes.map(async (n) => {
+      const key = n.key;
+      const nodeLoc = n.location;
+      await fs.promises.mkdir(path.join(location, key));
+      await copyDir(nodeLoc, path.join(location, key));
+    })
+  );
 }
 
 async function copyDir(source: string, destination: string): Promise<void> {
-        const entries = fs.readdirSync(source);
-        await Promise.all(entries.map(async e => {
-            const stats = await fs.promises.stat(path.join(source, e));
-            if (stats.isDirectory()) {
-                await fs.promises.mkdir(path.join(destination, e));
-                await copyDir(path.join(source, e), path.join(destination, e))
-            } else if (stats.isFile()) {
-                await fs.promises.copyFile(path.join(source, e), path.join(destination, e));
-            }
-        }))
+  const entries = fs.readdirSync(source);
+  await Promise.all(
+    entries.map(async (e) => {
+      const stats = await fs.promises.stat(path.join(source, e));
+      if (stats.isDirectory()) {
+        await fs.promises.mkdir(path.join(destination, e));
+        await copyDir(path.join(source, e), path.join(destination, e));
+      } else if (stats.isFile()) {
+        await fs.promises.copyFile(
+          path.join(source, e),
+          path.join(destination, e)
+        );
+      }
+    })
+  );
 }
 
 function validateInput(graph: Graph, location: string): void {
-    const locationError = getLocationError(location);
-    if (locationError !== undefined) {
-      throw new Error(locationError);
-    }
-    const GrapError = getGraphError(graph);
-    if (GrapError !== undefined) {
-      throw new Error(GrapError);
-    }
+  const locationError = getLocationError(location);
+  if (locationError !== undefined) {
+    throw new Error(locationError);
+  }
+  const GrapError = getGraphError(graph);
+  if (GrapError !== undefined) {
+    throw new Error(GrapError);
+  }
 }
 
 function getGraphError(graph: Graph): string | undefined {
@@ -105,6 +124,14 @@ function getGraphError(graph: Graph): string | undefined {
     return `Location of a node is not absolute: "${notAbsoluteLocations[0].location}"`;
   }
 
+  const nodesWithInvalidName = graph.nodes.filter(
+    (n) =>
+      !/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(n.name)
+  );
+  if (nodesWithInvalidName.length > 0) {
+    return `Package name invalid: "${nodesWithInvalidName[0].name}"`;
+  }
+
   const notFolderLocations = graph.nodes.filter((n) => {
     try {
       const stats = fs.statSync(n.location);
@@ -116,6 +143,7 @@ function getGraphError(graph: Graph): string | undefined {
       return false;
     }
   });
+
   if (notFolderLocations.length > 0) {
     return `Location of a node is not a directory: "${notFolderLocations[0].location}"`;
   }
@@ -133,6 +161,42 @@ function getGraphError(graph: Graph): string | undefined {
   if (linksWithWrongTarget.length > 0) {
     return `Invalid link target: "${linksWithWrongTarget[0].target}"`;
   }
+
+  const dependenciesWithSameNames: {
+    source: string;
+    targetName: string;
+  }[] = findDependenciesWithSameName(graph);
+  if (dependenciesWithSameNames.length > 0) {
+    const source = dependenciesWithSameNames[0].source;
+    const targetName = dependenciesWithSameNames[0].targetName;
+    return `Package "${source}" depends on multiple packages called "${targetName}"`;
+  }
+}
+
+function findDependenciesWithSameName(
+  graph: Graph
+): { source: string; targetName: string }[] {
+  const keyToNameMap = new Map<string, string>();
+  const dependenciesMap = new Map<string, Set<string>>();
+  const result: { source: string; targetName: string }[] = [];
+
+  graph.nodes.forEach((n) => {
+    keyToNameMap.set(n.key, n.name);
+  });
+
+  graph.links.forEach((l) => {
+      const targetName = keyToNameMap.get(l.target)!;
+      if (!dependenciesMap.get(l.source)) {
+          dependenciesMap.set(l.source, new Set<string>());
+      }
+      if (dependenciesMap.get(l.source)!.has(targetName)) {
+          result.push({ source: l.source, targetName});
+      } else {
+          dependenciesMap.get(l.source)!.add(targetName);
+      }
+  });
+
+  return result;
 }
 
 function findDups<T>(array: T[]): T | undefined {

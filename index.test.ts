@@ -60,14 +60,45 @@ describe("input validation", () => {
     });
   });
   describe("graph", () => {
+    it("throws if a node is linked to two different nodes that have the same name", async () => {
+      const dir = directory();
+      await expect(
+        installLocalStore(
+          {
+            nodes: [
+              { key: "foo1", name: "foo", location: process.cwd() },
+              { key: "foo2", name: "foo", location: process.cwd() },
+              { key: "bar1", name: "bar", location: process.cwd() },
+            ],
+            links: [
+              { source: "bar1", target: "foo1" },
+              { source: "bar1", target: "foo2" },
+            ],
+          },
+          dir
+        )
+      ).rejects.toHaveProperty("message", 'Package "bar1" depends on multiple packages called "foo"');
+    });
+    it("throws if a node has an invalid name", async () => {
+      const dir = directory();
+      await expect(
+        installLocalStore(
+          {
+            nodes: [{ key: "A", name: "-/3/8", location: process.cwd() }],
+            links: [],
+          },
+          dir
+        )
+      ).rejects.toHaveProperty("message", 'Package name invalid: "-/3/8"');
+    });
     it("throws if graph has multiple nodes with the same key", async () => {
       const dir = directory();
       await expect(
         installLocalStore(
           {
             nodes: [
-              { key: "A", name: "A", location: process.cwd() },
-              { key: "A", name: "B", location: process.cwd() },
+              { key: "A", name: "a", location: process.cwd() },
+              { key: "A", name: "b", location: process.cwd() },
             ],
             links: [],
           },
@@ -83,7 +114,7 @@ describe("input validation", () => {
       await expect(
         installLocalStore(
           {
-            nodes: [{ key: "A", name: "A", location: "fooBar" }],
+            nodes: [{ key: "A", name: "a", location: "fooBar" }],
             links: [],
           },
           dir
@@ -102,7 +133,7 @@ describe("input validation", () => {
       await expect(
         installLocalStore(
           {
-            nodes: [{ key: "A", name: "A", location: filePath }],
+            nodes: [{ key: "A", name: "a", location: filePath }],
             links: [],
           },
           storePath
@@ -117,7 +148,7 @@ describe("input validation", () => {
       await expect(
         installLocalStore(
           {
-            nodes: [{ key: "A", name: "A", location: dir }],
+            nodes: [{ key: "A", name: "a", location: dir }],
             links: [{ source: "B", target: "A" }],
           },
           dir
@@ -129,7 +160,7 @@ describe("input validation", () => {
       await expect(
         installLocalStore(
           {
-            nodes: [{ key: "A", name: "A", location: dir }],
+            nodes: [{ key: "A", name: "a", location: dir }],
             links: [{ source: "A", target: "B" }],
           },
           dir
@@ -157,12 +188,12 @@ describe("happy path", () => {
 
     await installLocalStore(graph, store);
 
-    expect(fs.readFileSync(path.join(store, "fookey", "foo.js")).toString()).toBe(
-      'console.log("foo")'
-    );
-    expect(fs.readFileSync(path.join(store, "barkey", "bar.js")).toString()).toBe(
-      'console.log("bar")'
-    );
+    expect(
+      fs.readFileSync(path.join(store, "fookey", "foo.js")).toString()
+    ).toBe('console.log("foo")');
+    expect(
+      fs.readFileSync(path.join(store, "barkey", "bar.js")).toString()
+    ).toBe('console.log("bar")');
   });
   it("Installs packages having nested folders", async () => {
     const store = directory();
@@ -171,17 +202,15 @@ describe("happy path", () => {
     fs.writeFileSync(path.join(foo, "bar", "foo.js"), 'console.log("foo")');
 
     const graph = {
-      nodes: [
-        { key: "fookey", name: "foo", location: foo }
-      ],
+      nodes: [{ key: "fookey", name: "foo", location: foo }],
       links: [],
     };
 
     await installLocalStore(graph, store);
 
-    expect(fs.readFileSync(path.join(store, "fookey", "bar", "foo.js")).toString()).toBe(
-      'console.log("foo")'
-    );
+    expect(
+      fs.readFileSync(path.join(store, "fookey", "bar", "foo.js")).toString()
+    ).toBe('console.log("foo")');
   });
   it("Links packages as specified in the graph", async () => {
     const store = directory();
@@ -200,21 +229,21 @@ describe("happy path", () => {
 
     await installLocalStore(graph, store);
 
-    expect(fs.readFileSync(path.join(store, "fookey", "node_modules", "bar", "bar.js")).toString()).toBe(
-      'console.log("bar")'
-    );
+    expect(
+      fs
+        .readFileSync(
+          path.join(store, "fookey", "node_modules", "bar", "bar.js")
+        )
+        .toString()
+    ).toBe('console.log("bar")');
   });
 });
 
 /**
  * Tests to add
- * - Validation:
- *   - names are valid package names
  * - Scenarios:
  *   - several nodes have same name
- *   - one node has a dependency to two nodes that have the same name.
  *   - package contains invalid files
- *   - a few nodes and a few links
  *   - a package name has a namespace
  *   - a package with a namespace name has a bin field which is a string
  *   - a package with a bin field which is an object
