@@ -12,6 +12,74 @@ it("finds the function", () => {
 });
 
 describe("input validation", () => {
+  describe("bins", () => {
+    it("throws if bin names contain slashes", async () => {
+      const dir = directory();
+      await expect(
+        installLocalStore(
+          {
+            nodes: [
+              {
+                name: "foo",
+                key: "fooKey",
+                location: process.cwd(),
+                bins: { "/wrongBinName": "index.js" },
+              },
+            ],
+            links: [],
+          },
+          dir
+        )
+      ).rejects.toHaveProperty(
+        "message",
+        'Package "fooKey" exposes a bin script with an invalid name: "/wrongBinName"'
+      );
+    });
+    it("throws if bin names contain back-slashes", async () => {
+      const dir = directory();
+      await expect(
+        installLocalStore(
+          {
+            nodes: [
+              {
+                name: "foo",
+                key: "fooKey",
+                location: process.cwd(),
+                bins: { "\\wrongBinName": "index.js" },
+              },
+            ],
+            links: [],
+          },
+          dir
+        )
+      ).rejects.toHaveProperty(
+        "message",
+        'Package "fooKey" exposes a bin script with an invalid name: "\\wrongBinName"'
+      );
+    });
+    it("throws if bin names contain a new-line", async () => {
+        const dir = directory();
+        await expect(
+          installLocalStore(
+            {
+              nodes: [
+                {
+                  name: "foo",
+                  key: "fooKey",
+                  location: process.cwd(),
+                  bins: { "wro\nngBinName": "index.js" },
+                },
+              ],
+              links: [],
+            },
+            dir
+          )
+        ).rejects.toHaveProperty(
+          "message",
+          'Package "fooKey" exposes a bin script with an invalid name: "wro\nngBinName"'
+        );
+      });
+  });
   describe("location", () => {
     it("throws if the location is a relative path", async () => {
       await expect(
@@ -78,7 +146,10 @@ describe("input validation", () => {
           },
           dir
         )
-      ).rejects.toHaveProperty("message", 'Package "bar1" depends on multiple packages called "foo"');
+      ).rejects.toHaveProperty(
+        "message",
+        'Package "bar1" depends on multiple packages called "foo"'
+      );
     });
     it("throws if a node has an invalid name", async () => {
       const dir = directory();
@@ -237,28 +308,36 @@ describe("happy path", () => {
         )
         .toString()
     ).toBe('console.log("bar")');
-  })
+  });
   it("Creates simple bin script", async () => {
     const store = directory();
     const foo = directory();
-    await fs.promises.writeFile(path.join(foo, "package.json"), '{"scripts":{"bar": "bar"}}');
+    await fs.promises.writeFile(
+      path.join(foo, "package.json"),
+      '{"scripts":{"bar": "bar"}}'
+    );
     const bar = directory();
-    await fs.promises.writeFile(path.join(bar, "myBin"), '#!/usr/bin/env node\nconsole.log("Hello from bar");');
-
+    await fs.promises.writeFile(
+      path.join(bar, "myBin"),
+      '#!/usr/bin/env node\nconsole.log("Hello from bar");'
+    );
 
     const graph = {
-        nodes: [
-          { key: "fookey", name: "foo", location: foo },
-          { key: "barkey", name: "bar", bins: { "bar": "myBin" }, location: bar },
-        ],
-        links: [{ source: "fookey", target: "barkey" }],
-      };
-  
-      await installLocalStore(graph, store);
-  
-      const scriptOutput = execSync("npm run --silent bar" , { encoding: "utf-8", cwd: path.join(store, "fookey") }).trim();
+      nodes: [
+        { key: "fookey", name: "foo", location: foo },
+        { key: "barkey", name: "bar", bins: { bar: "myBin" }, location: bar },
+      ],
+      links: [{ source: "fookey", target: "barkey" }],
+    };
 
-      expect(scriptOutput).toBe("Hello from bar")
+    await installLocalStore(graph, store);
+
+    const scriptOutput = execSync("npm run --silent bar", {
+      encoding: "utf-8",
+      cwd: path.join(store, "fookey"),
+    }).trim();
+
+    expect(scriptOutput).toBe("Hello from bar");
   });
 });
 
@@ -272,5 +351,6 @@ describe("happy path", () => {
  *   - circular dependencies are supported
  *   - two packages provide the same bin
  *   - bins can be in a nested folder
- *   - bin names validation (no slashes in there)
+ *   - bin files are that don't exist are ignored but emit a warning
+ *   - bin files should be relative path
  */

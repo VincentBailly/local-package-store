@@ -161,6 +161,25 @@ function validateInput(graph: Graph, location: string): void {
   if (GrapError !== undefined) {
     throw new Error(GrapError);
   }
+  const binError = getBinError(graph);
+  if (binError !== undefined) {
+    throw new Error(binError);
+  }
+}
+
+function getBinError(graph: Graph): string | undefined {
+    const errors = graph.nodes.map(node => {
+        if (!node.bins) { return []; }
+        return Object.keys(node.bins).map(binName => {
+            if (/\/|\\|\n/.test(binName)) {
+                return `Package "${node.key}" exposes a bin script with an invalid name: "${binName}"`;
+            }
+        }).filter(o => o !== undefined)
+    }).filter(a => a.length > 0);
+    if (errors.length === 0) {
+        return undefined;
+    }
+    return errors[0]![0]!;
 }
 
 function getGraphError(graph: Graph): string | undefined {
