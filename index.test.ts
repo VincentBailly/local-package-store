@@ -3,6 +3,7 @@ import type { Graph } from ".";
 import { directory } from "tempy";
 import * as fs from "fs";
 import * as path from "path";
+import { execSync } from "child_process";
 
 const emptyGraph: Graph = { nodes: [], links: [] };
 
@@ -236,6 +237,28 @@ describe("happy path", () => {
         )
         .toString()
     ).toBe('console.log("bar")');
+  })
+  it("Creates simple bin script", async () => {
+    const store = directory();
+    const foo = directory();
+    await fs.promises.writeFile(path.join(foo, "package.json"), '{"scripts":{"bar": "bar"}}');
+    const bar = directory();
+    await fs.promises.writeFile(path.join(bar, "myBin"), '#!/usr/bin/env node\nconsole.log("Hello from bar");');
+
+
+    const graph = {
+        nodes: [
+          { key: "fookey", name: "foo", location: foo },
+          { key: "barkey", name: "bar", bins: { "bar": "myBin" }, location: bar },
+        ],
+        links: [{ source: "fookey", target: "barkey" }],
+      };
+  
+      await installLocalStore(graph, store);
+  
+      const scriptOutput = execSync("npm run --silent bar" , { encoding: "utf-8", cwd: path.join(store, "fookey") }).trim();
+
+      expect(scriptOutput).toBe("Hello from bar")
   });
 });
 
@@ -243,9 +266,11 @@ describe("happy path", () => {
  * Tests to add
  * - Scenarios:
  *   - several nodes have same name
- *   - package contains invalid files
  *   - a package name has a namespace
  *   - a package with a namespace name has a bin field which is a string
  *   - a package with a bin field which is an object
  *   - circular dependencies are supported
+ *   - two packages provide the same bin
+ *   - bins can be in a nested folder
+ *   - bin names validation (no slashes in there)
  */

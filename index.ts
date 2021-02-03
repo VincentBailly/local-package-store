@@ -1,5 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
+const cmdShim: (
+  from: string,
+  to: string
+) => Promise<void> = require("cmd-shim");
 
 /**
  * Dependency graph.
@@ -17,6 +21,10 @@ export type Graph = {
      * Name of the node.
      */
     name: string;
+    /**
+     * List of the bins provided by this package.
+     */
+    bins?: { [key: string]: string };
     /**
      * Absolute path to a folder where the content of this node is stored.
      */
@@ -52,6 +60,49 @@ export async function installLocalStore(
   await installNodesInStore(graph, location);
 
   await linkNodes(graph, location);
+
+  await createBins(graph, location);
+}
+
+async function createBins(graph: Graph, location: string): Promise<void> {
+  const binsMap = new Map<string, Map<string, string>>();
+
+  graph.nodes.forEach((n) => {
+    if (!n.bins) {
+      return;
+    }
+    if (!binsMap.get(n.key)) {
+      binsMap.set(n.key, new Map<string, string>());
+    }
+
+    Object.keys(n.bins).forEach((binName) => {
+      binsMap.get(n.key)!.set(binName, n.bins![binName]);
+    });
+  });
+
+  await Promise.all(
+    graph.links.map(async (link) => {
+      const bins = binsMap.get(link.target);
+      if (!bins) {
+        return;
+      }
+      await fs.promises.mkdir(
+        path.join(location, link.source, "node_modules", ".bin"),
+        { recursive: true }
+      );
+      for (const [binName, binLocation] of bins) {
+        const binLoc = path.join(location, link.target, binLocation);
+        const binLink = path.join(
+          location,
+          link.source,
+          "node_modules",
+          ".bin",
+          binName
+        );
+        await cmdShim(binLoc, binLink);
+      }
+    })
+  );
 }
 
 async function linkNodes(graph: Graph, location: string): Promise<void> {
@@ -185,15 +236,15 @@ function findDependenciesWithSameName(
   });
 
   graph.links.forEach((l) => {
-      const targetName = keyToNameMap.get(l.target)!;
-      if (!dependenciesMap.get(l.source)) {
-          dependenciesMap.set(l.source, new Set<string>());
-      }
-      if (dependenciesMap.get(l.source)!.has(targetName)) {
-          result.push({ source: l.source, targetName});
-      } else {
-          dependenciesMap.get(l.source)!.add(targetName);
-      }
+    const targetName = keyToNameMap.get(l.target)!;
+    if (!dependenciesMap.get(l.source)) {
+      dependenciesMap.set(l.source, new Set<string>());
+    }
+    if (dependenciesMap.get(l.source)!.has(targetName)) {
+      result.push({ source: l.source, targetName });
+    } else {
+      dependenciesMap.get(l.source)!.add(targetName);
+    }
   });
 
   return result;
