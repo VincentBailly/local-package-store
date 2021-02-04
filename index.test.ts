@@ -546,6 +546,25 @@ describe("special-cases", () => {
 
     await installLocalStore(graph, store);
   })
+  it("absolute bin path are ignored", async () => {
+    const store = directory();
+    const foo = directory();
+    await fs.promises.writeFile(
+      path.join(foo, "index.js"), "");
+
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", bins: { foo: path.join(foo, "index.js") }, location: foo },
+        { key: "barkey", name: "bar", location: emptyFolder }
+      ],
+      links: [ { source: "barkey", target: "fookey"}],
+    };
+
+    await installLocalStore(graph, store);
+
+    await expect(fs.promises.stat(path.join(store, "barkey", "node_modules", ".bin", "foo"))).rejects.toThrow();
+  })
 });
 
 /**
