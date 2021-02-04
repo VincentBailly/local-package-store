@@ -472,6 +472,21 @@ describe("special-cases", () => {
     await installLocalStore(graph, store);
 
   })
+  it("allows circular dependencies", async () => {
+    const store = directory();
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: emptyFolder },
+        { key: "barkey", name: "bar", location: emptyFolder }
+      ],
+      links: [ {source: "fookey", target: "barkey"},
+    {source: "barkey", target: "fookey"}],
+    };
+
+    await installLocalStore(graph, store);
+
+  })
 });
 
 /**
