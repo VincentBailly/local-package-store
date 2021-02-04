@@ -392,7 +392,7 @@ describe("special-cases", () => {
 
     await installLocalStore(graph, store);
   });
-  it.only("installed packages named with a namespace", async () => {
+  it("installed packages named with a namespace", async () => {
     const store = directory();
     const foo = directory();
     await fs.promises.writeFile(
@@ -410,16 +410,44 @@ describe("special-cases", () => {
     await installLocalStore(graph, store);
 
     await fs.promises.stat(path.join(store, "barkey", "node_modules", "@namespace", "foo", "index.js"))
-
   });
+  it("installs bins that are in a nested folder", async () => {
+    const store = directory();
+    const foo = directory();
+    await fs.promises.writeFile(
+      path.join(foo, "package.json"),
+      '{"scripts":{"bar": "bar"}}'
+    );
+    const bar = directory();
+    await fs.promises.mkdir(path.join(bar, "sub"));
+    await fs.promises.writeFile(
+      path.join(bar, "sub", "myBin"),
+      '#!/usr/bin/env node\nconsole.log("Hello from bar");'
+    );
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: foo },
+        { key: "barkey", name: "bar", bins: { bar: "./sub/myBin" }, location: bar },
+      ],
+      links: [{ source: "fookey", target: "barkey" }],
+    };
+
+    await installLocalStore(graph, store);
+
+    const scriptOutput = execSync("npm run --silent bar", {
+      encoding: "utf-8",
+      cwd: path.join(store, "fookey"),
+    }).trim();
+
+    expect(scriptOutput).toBe("Hello from bar");
+  })
 });
 
 /**
  * Tests to add
  * - Scenarios:
- *   - a package with a bin field which is an object
  *   - circular dependencies are supported
- *   - bins can be in a nested folder
  *   - bin files are that don't exist are ignored but emit a warning
  *   - bin files should be relative path
  *   - packages always depend on themselves
