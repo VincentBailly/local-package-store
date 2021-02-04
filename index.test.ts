@@ -374,10 +374,25 @@ describe("happy path", () => {
   });
 });
 
+describe("special-cases", () => {
+    it("accept several nodes having the sane name", async () => {
+    const store = directory();
+    
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "bar", location: process.cwd() },
+        { key: "barkey", name: "bar", location: process.cwd() },
+      ],
+      links: [],
+    };
+
+    await installLocalStore(graph, store);
+    })
+})
+
 /**
  * Tests to add
  * - Scenarios:
- *   - several nodes have same name
  *   - a package name has a namespace
  *   - a package with a bin field which is an object
  *   - circular dependencies are supported
