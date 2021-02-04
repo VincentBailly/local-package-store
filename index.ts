@@ -111,7 +111,7 @@ async function linkNodes(graph: Graph, location: string): Promise<void> {
       // TODO: this is very bad for perf, improve this.
       const name = graph.nodes.find((n) => n.key === link.target)!.name;
       await fs.promises.mkdir(
-        path.join(location, link.source, "node_modules"),
+        path.dirname(path.join(location, link.source, "node_modules", name)),
         { recursive: true }
       );
       await fs.promises.symlink(

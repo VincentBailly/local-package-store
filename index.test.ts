@@ -5,6 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 
+const emptyFolder: string = directory();
 const emptyGraph: Graph = { nodes: [], links: [] };
 
 it("finds the function", () => {
@@ -22,7 +23,7 @@ describe("input validation", () => {
               {
                 name: "foo",
                 key: "fooKey",
-                location: process.cwd(),
+                location: emptyFolder,
                 bins: { "/wrongBinName": "index.js" },
               },
             ],
@@ -44,7 +45,7 @@ describe("input validation", () => {
               {
                 name: "foo",
                 key: "fooKey",
-                location: process.cwd(),
+                location: emptyFolder,
                 bins: { "\\wrongBinName": "index.js" },
               },
             ],
@@ -58,60 +59,63 @@ describe("input validation", () => {
       );
     });
     it("throws if bin names contain a new-line", async () => {
-        const dir = directory();
-        await expect(
-          installLocalStore(
-            {
-              nodes: [
-                {
-                  name: "foo",
-                  key: "fooKey",
-                  location: process.cwd(),
-                  bins: { "wro\nngBinName": "index.js" },
-                },
-              ],
-              links: [],
-            },
-            dir
-          )
-        ).rejects.toHaveProperty(
-          "message",
-          'Package "fooKey" exposes a bin script with an invalid name: "wro\nngBinName"'
-        );
-      });
-      it("throws if two different bin scripts with the same name have to be installed at the same location", async () => {
-        const dir = directory();
-        await expect(
-          installLocalStore(
-            {
-              nodes: [
-                {
-                  name: "foo",
-                  key: "foo1",
-                  location: process.cwd(),
-                  bins: { "fooScript": "index.js" },
-                },
-                {
-                    name: "foobar",
-                    key: "foo2",
-                    location: process.cwd(),
-                    bins: { "fooScript": "index.js" },
-                  },
-                  {
-                    name: "bar",
-                    key: "barKey",
-                    location: process.cwd()
-                  },
-              ],
-              links: [{ source: "barKey", target: "foo1"}, { source: "barKey", target: "foo2"}],
-            },
-            dir
-          )
-        ).rejects.toHaveProperty(
-          "message",
-          'Several different scripts called "fooScript" need to be installed at the same location (barKey).'
-        );
-      });
+      const dir = directory();
+      await expect(
+        installLocalStore(
+          {
+            nodes: [
+              {
+                name: "foo",
+                key: "fooKey",
+                location: emptyFolder,
+                bins: { "wro\nngBinName": "index.js" },
+              },
+            ],
+            links: [],
+          },
+          dir
+        )
+      ).rejects.toHaveProperty(
+        "message",
+        'Package "fooKey" exposes a bin script with an invalid name: "wro\nngBinName"'
+      );
+    });
+    it("throws if two different bin scripts with the same name have to be installed at the same location", async () => {
+      const dir = directory();
+      await expect(
+        installLocalStore(
+          {
+            nodes: [
+              {
+                name: "foo",
+                key: "foo1",
+                location: emptyFolder,
+                bins: { fooScript: "index.js" },
+              },
+              {
+                name: "foobar",
+                key: "foo2",
+                location: emptyFolder,
+                bins: { fooScript: "index.js" },
+              },
+              {
+                name: "bar",
+                key: "barKey",
+                location: emptyFolder,
+              },
+            ],
+            links: [
+              { source: "barKey", target: "foo1" },
+              { source: "barKey", target: "foo2" },
+            ],
+          },
+          dir
+        )
+      ).rejects.toHaveProperty(
+        "message",
+        'Several different scripts called "fooScript" need to be installed at the same location (barKey).'
+      );
+    });
   });
   describe("location", () => {
     it("throws if the location is a relative path", async () => {
@@ -168,9 +172,9 @@ describe("input validation", () => {
         installLocalStore(
           {
             nodes: [
-              { key: "foo1", name: "foo", location: process.cwd() },
-              { key: "foo2", name: "foo", location: process.cwd() },
-              { key: "bar1", name: "bar", location: process.cwd() },
+              { key: "foo1", name: "foo", location: emptyFolder },
+              { key: "foo2", name: "foo", location: emptyFolder },
+              { key: "bar1", name: "bar", location: emptyFolder },
             ],
             links: [
               { source: "bar1", target: "foo1" },
@@ -189,7 +193,7 @@ describe("input validation", () => {
       await expect(
         installLocalStore(
           {
-            nodes: [{ key: "A", name: "-/3/8", location: process.cwd() }],
+            nodes: [{ key: "A", name: "-/3/8", location: emptyFolder }],
             links: [],
           },
           dir
@@ -202,8 +206,8 @@ describe("input validation", () => {
         installLocalStore(
           {
             nodes: [
-              { key: "A", name: "a", location: process.cwd() },
-              { key: "A", name: "b", location: process.cwd() },
+              { key: "A", name: "a", location: emptyFolder },
+              { key: "A", name: "b", location: emptyFolder },
             ],
             links: [],
           },
@@ -375,25 +379,44 @@ describe("happy path", () => {
 });
 
 describe("special-cases", () => {
-    it("accept several nodes having the sane name", async () => {
+  it("accept several nodes having the sane name", async () => {
     const store = directory();
-    
+
     const graph = {
       nodes: [
-        { key: "fookey", name: "bar", location: process.cwd() },
-        { key: "barkey", name: "bar", location: process.cwd() },
+        { key: "fookey", name: "bar", location: emptyFolder },
+        { key: "barkey", name: "bar", location: emptyFolder },
       ],
       links: [],
     };
 
     await installLocalStore(graph, store);
-    })
-})
+  });
+  it.only("installed packages named with a namespace", async () => {
+    const store = directory();
+    const foo = directory();
+    await fs.promises.writeFile(
+      path.join(foo, "index.js"),
+      'console.log("hello from foo");'
+    );
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "@namespace/foo", location: foo },
+        { key: "barkey", name: "bar", location: emptyFolder },
+      ],
+      links: [{source: "barkey", target: "fookey"}],
+    };
+
+    await installLocalStore(graph, store);
+
+    await fs.promises.stat(path.join(store, "barkey", "node_modules", "@namespace", "foo", "index.js"))
+
+  });
+});
 
 /**
  * Tests to add
  * - Scenarios:
- *   - a package name has a namespace
  *   - a package with a bin field which is an object
  *   - circular dependencies are supported
  *   - bins can be in a nested folder
@@ -401,4 +424,5 @@ describe("special-cases", () => {
  *   - bin files should be relative path
  *   - packages always depend on themselves
  *   - a package will install its own bin scripts in its bin folder
+ *   - a package can depend on itself even when it has a namespace
  */
