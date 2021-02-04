@@ -507,7 +507,6 @@ describe("special-cases", () => {
     };
 
     await installLocalStore(graph, store);
-    console.log({store})
 
     const scriptOutput = execSync("npm run --silent foo", {
       encoding: "utf-8",
@@ -535,11 +534,22 @@ describe("special-cases", () => {
 
     await fs.promises.stat(path.join(store, "fookey", "node_modules", "@name", "foo", "package.json"))
   })
+  it("installs bins in owner's package", async () => {
+    const store = directory();
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", bins: { foo: "./myBin" }, location: emptyFolder },
+      ],
+      links: [],
+    };
+
+    await installLocalStore(graph, store);
+  })
 });
 
 /**
  * Tests to add
  * - Scenarios:
- *   - bin files are that don't exist are ignored
  *   - bin files should be relative path
  */

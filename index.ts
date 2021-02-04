@@ -102,6 +102,11 @@ async function createBins(graph: Graph, location: string): Promise<void> {
       );
       for (const [binName, binLocation] of bins) {
         const binLoc = path.join(location, link.target, binLocation);
+        try {
+            await fs.promises.stat(binLoc);
+        } catch {
+            continue;
+        }
         const binLink = path.join(
           location,
           link.source,
