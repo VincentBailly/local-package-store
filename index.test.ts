@@ -79,6 +79,39 @@ describe("input validation", () => {
           'Package "fooKey" exposes a bin script with an invalid name: "wro\nngBinName"'
         );
       });
+      it("throws if two different bin scripts with the same name have to be installed at the same location", async () => {
+        const dir = directory();
+        await expect(
+          installLocalStore(
+            {
+              nodes: [
+                {
+                  name: "foo",
+                  key: "foo1",
+                  location: process.cwd(),
+                  bins: { "fooScript": "index.js" },
+                },
+                {
+                    name: "foobar",
+                    key: "foo2",
+                    location: process.cwd(),
+                    bins: { "fooScript": "index.js" },
+                  },
+                  {
+                    name: "bar",
+                    key: "barKey",
+                    location: process.cwd()
+                  },
+              ],
+              links: [{ source: "barKey", target: "foo1"}, { source: "barKey", target: "foo2"}],
+            },
+            dir
+          )
+        ).rejects.toHaveProperty(
+          "message",
+          'Several different scripts called "fooScript" need to be installed at the same location (barKey).'
+        );
+      });
   });
   describe("location", () => {
     it("throws if the location is a relative path", async () => {
@@ -346,11 +379,11 @@ describe("happy path", () => {
  * - Scenarios:
  *   - several nodes have same name
  *   - a package name has a namespace
- *   - a package with a namespace name has a bin field which is a string
  *   - a package with a bin field which is an object
  *   - circular dependencies are supported
- *   - two packages provide the same bin
  *   - bins can be in a nested folder
  *   - bin files are that don't exist are ignored but emit a warning
  *   - bin files should be relative path
+ *   - packages always depend on themselves
+ *   - a package will install its own bin scripts in its bin folder
  */

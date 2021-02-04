@@ -110,7 +110,10 @@ async function linkNodes(graph: Graph, location: string): Promise<void> {
     graph.links.map(async (link) => {
       // TODO: this is very bad for perf, improve this.
       const name = graph.nodes.find((n) => n.key === link.target)!.name;
-      await fs.promises.mkdir(path.join(location, link.source, "node_modules"));
+      await fs.promises.mkdir(
+        path.join(location, link.source, "node_modules"),
+        { recursive: true }
+      );
       await fs.promises.symlink(
         path.join(location, link.target),
         path.join(location, link.source, "node_modules", name),
@@ -168,18 +171,57 @@ function validateInput(graph: Graph, location: string): void {
 }
 
 function getBinError(graph: Graph): string | undefined {
-    const errors = graph.nodes.map(node => {
-        if (!node.bins) { return []; }
-        return Object.keys(node.bins).map(binName => {
-            if (/\/|\\|\n/.test(binName)) {
-                return `Package "${node.key}" exposes a bin script with an invalid name: "${binName}"`;
-            }
-        }).filter(o => o !== undefined)
-    }).filter(a => a.length > 0);
-    if (errors.length === 0) {
-        return undefined;
-    }
+  const errors = graph.nodes
+    .map((node) => {
+      if (!node.bins) {
+        return [];
+      }
+      return Object.keys(node.bins)
+        .map((binName) => {
+          if (/\/|\\|\n/.test(binName)) {
+            return `Package "${node.key}" exposes a bin script with an invalid name: "${binName}"`;
+          }
+        })
+        .filter((o) => o !== undefined);
+    })
+    .filter((a) => a.length > 0);
+  if (errors.length !== 0) {
     return errors[0]![0]!;
+  }
+
+  const binsMap = new Map<string, Set<string>>();
+  graph.nodes.forEach((node) => {
+    const newSet = new Set<string>();
+    if (node.bins) {
+      Object.keys(node.bins).forEach((binName) => {
+        newSet.add(binName);
+      });
+    }
+    binsMap.set(node.key, newSet);
+  });
+
+  const binCollisionErrors: string[] = [];
+  const installedBinMap = new Map<string, Set<string>>();
+  graph.nodes.forEach((node) => {
+    installedBinMap.set(node.key, new Set());
+  });
+  graph.links.forEach(({ source, target }) => {
+    const targetBins = binsMap.get(target)!;
+    targetBins.forEach((binName) => {
+      if (installedBinMap.get(source)!.has(binName)) {
+        binCollisionErrors.push(
+          `Several different scripts called "${binName}" need to be installed at the same location (${source}).`
+        );
+      }
+      installedBinMap.get(source)!.add(binName);
+    });
+  });
+
+  if (binCollisionErrors.length > 0) {
+    return binCollisionErrors[0];
+  }
+
+  return undefined;
 }
 
 function getGraphError(graph: Graph): string | undefined {
