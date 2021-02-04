@@ -1,5 +1,14 @@
 Install a local package store for a given dependency graph.
 
+The installation is does using a flat structure where packages are connected with symlinks.
+The package is meant to be used as a component of a package manager.
+
+Features:
+
+- Install packages in a flat structure.
+- Install bin scripts.
+- Support package names with a namespace.
+
 Usage:
 ```javascript
 const { installLocalStore } = require("local-package-store");

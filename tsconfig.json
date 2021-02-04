@@ -3,8 +3,10 @@
         "target": "ES2018",
         "module": "CommonJS",
         "strict": true,
-        "declaration": true
+        "declaration": true,
+        "rootDir": "src",
+        "outDir": "lib"
 
     },
-    "files": ["index.ts"]
+    "files": ["src/index.ts"]
 }

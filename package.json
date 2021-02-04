@@ -2,7 +2,8 @@
   "name": "local-package-store",
   "version": "1.0.0",
   "description": "Install a dependency graph on disk.",
-  "main": "index.js",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "scripts": {
     "build": "tsc",
     "test": "jest"
