@@ -59,9 +59,19 @@ export async function installLocalStore(
 
   await installNodesInStore(graph, location);
 
-  await linkNodes(graph, location);
+  const newGraph = addSelfLinks(graph);
 
-  await createBins(graph, location);
+  await linkNodes(newGraph, location);
+
+  await createBins(newGraph, location);
+}
+
+function addSelfLinks(graph: Graph): Graph {
+    const newGraph = { nodes : [...graph.nodes], links: [...graph.links.filter(link => link.source !== link.target)]};
+    graph.nodes.forEach(n => {
+        newGraph.links.push({source: n.key, target: n.key});
+    })
+    return newGraph;
 }
 
 async function createBins(graph: Graph, location: string): Promise<void> {

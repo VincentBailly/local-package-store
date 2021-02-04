@@ -442,6 +442,36 @@ describe("special-cases", () => {
 
     expect(scriptOutput).toBe("Hello from bar");
   })
+  it("always add a dependency from a package to itself", async () => {
+    const store = directory();
+    const foo = directory();
+    await fs.promises.writeFile(
+      path.join(foo, "index.js"), "");
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: foo }
+      ],
+      links: [],
+    };
+
+    await installLocalStore(graph, store);
+
+    await fs.promises.stat(path.join(store, "fookey", "node_modules", "foo", "index.js"))
+  })
+  it("allows dependencies to self to be declared explicitely", async () => {
+    const store = directory();
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: emptyFolder }
+      ],
+      links: [ {source: "fookey", target: "fookey"}],
+    };
+
+    await installLocalStore(graph, store);
+
+  })
 });
 
 /**
@@ -450,7 +480,6 @@ describe("special-cases", () => {
  *   - circular dependencies are supported
  *   - bin files are that don't exist are ignored but emit a warning
  *   - bin files should be relative path
- *   - packages always depend on themselves
  *   - a package will install its own bin scripts in its bin folder
  *   - a package can depend on itself even when it has a namespace
  */
