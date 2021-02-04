@@ -492,7 +492,6 @@ describe("special-cases", () => {
 /**
  * Tests to add
  * - Scenarios:
- *   - circular dependencies are supported
  *   - bin files are that don't exist are ignored but emit a warning
  *   - bin files should be relative path
  *   - a package will install its own bin scripts in its bin folder
