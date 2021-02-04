@@ -516,12 +516,30 @@ describe("special-cases", () => {
 
     expect(scriptOutput).toBe("Hello from foo");
   })
+  it("allows package with a namespace to depend on themselves.", async () => {
+    const store = directory();
+    const foo = directory();
+    await fs.promises.writeFile(
+      path.join(foo, "package.json"),
+      '{}'
+    );
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "@name/foo", location: foo }
+      ],
+      links: [ {source: "fookey", target: "fookey"}],
+    };
+
+    await installLocalStore(graph, store);
+
+    await fs.promises.stat(path.join(store, "fookey", "node_modules", "@name", "foo", "package.json"))
+  })
 });
 
 /**
  * Tests to add
  * - Scenarios:
- *   - bin files are that don't exist are ignored but emit a warning
+ *   - bin files are that don't exist are ignored
  *   - bin files should be relative path
- *   - a package can depend on itself even when it has a namespace
  */
