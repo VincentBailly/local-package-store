@@ -487,6 +487,35 @@ describe("special-cases", () => {
     await installLocalStore(graph, store);
 
   })
+  it("installs bins in owner's package", async () => {
+    const store = directory();
+    const foo = directory();
+    await fs.promises.writeFile(
+      path.join(foo, "package.json"),
+      '{"scripts":{"foo": "foo"}}'
+    );
+    await fs.promises.writeFile(
+      path.join(foo, "myBin"),
+      '#!/usr/bin/env node\nconsole.log("Hello from foo");'
+    );
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", bins: { foo: "./myBin" }, location: foo },
+      ],
+      links: [],
+    };
+
+    await installLocalStore(graph, store);
+    console.log({store})
+
+    const scriptOutput = execSync("npm run --silent foo", {
+      encoding: "utf-8",
+      cwd: path.join(store, "fookey"),
+    }).trim();
+
+    expect(scriptOutput).toBe("Hello from foo");
+  })
 });
 
 /**
@@ -494,6 +523,5 @@ describe("special-cases", () => {
  * - Scenarios:
  *   - bin files are that don't exist are ignored but emit a warning
  *   - bin files should be relative path
- *   - a package will install its own bin scripts in its bin folder
  *   - a package can depend on itself even when it has a namespace
  */
