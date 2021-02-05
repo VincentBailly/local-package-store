@@ -22,6 +22,10 @@ export type Graph = {
      */
     name: string;
     /**
+     * Use the package in place, do not copy it to the store.
+     */
+    keepInPlace?: boolean;
+    /**
      * List of the bins provided by this package.
      */
     bins?: { [key: string]: string };
@@ -55,26 +59,31 @@ export async function installLocalStore(
   graph: Graph,
   location: string
 ): Promise<void> {
+  const locationMap = new Map<string, string>();
+
   validateInput(graph, location);
 
-  await installNodesInStore(graph, location);
+  await installNodesInStore(graph, location, locationMap);
 
   const newGraph = addSelfLinks(graph);
 
-  await linkNodes(newGraph, location);
+  await linkNodes(newGraph, location, locationMap);
 
-  await createBins(newGraph, location);
+  await createBins(newGraph, location, locationMap);
 }
 
 function addSelfLinks(graph: Graph): Graph {
-    const newGraph = { nodes : [...graph.nodes], links: [...graph.links.filter(link => link.source !== link.target)]};
-    graph.nodes.forEach(n => {
-        newGraph.links.push({source: n.key, target: n.key});
-    })
-    return newGraph;
+  const newGraph = {
+    nodes: [...graph.nodes],
+    links: [...graph.links.filter((link) => link.source !== link.target)],
+  };
+  graph.nodes.forEach((n) => {
+    newGraph.links.push({ source: n.key, target: n.key });
+  });
+  return newGraph;
 }
 
-async function createBins(graph: Graph, location: string): Promise<void> {
+async function createBins(graph: Graph, location: string, locationMap: Map<string, string>): Promise<void> {
   const binsMap = new Map<string, Map<string, string>>();
 
   graph.nodes.forEach((n) => {
@@ -97,19 +106,18 @@ async function createBins(graph: Graph, location: string): Promise<void> {
         return;
       }
       await fs.promises.mkdir(
-        path.join(location, link.source, "node_modules", ".bin"),
+        path.join(locationMap.get(link.source)!, "node_modules", ".bin"),
         { recursive: true }
       );
       for (const [binName, binLocation] of bins) {
-        const binLoc = path.join(location, link.target, binLocation);
+        const binLoc = path.join(locationMap.get(link.target)!, binLocation);
         try {
-            await fs.promises.stat(binLoc);
+          await fs.promises.stat(binLoc);
         } catch {
-            continue;
+          continue;
         }
         const binLink = path.join(
-          location,
-          link.source,
+          locationMap.get(link.source)!,
           "node_modules",
           ".bin",
           binName
@@ -120,18 +128,19 @@ async function createBins(graph: Graph, location: string): Promise<void> {
   );
 }
 
-async function linkNodes(graph: Graph, location: string): Promise<void> {
+async function linkNodes(graph: Graph, location: string, locationMap: Map<string, string>): Promise<void> {
   await Promise.all(
     graph.links.map(async (link) => {
       // TODO: this is very bad for perf, improve this.
       const name = graph.nodes.find((n) => n.key === link.target)!.name;
+      await fs.promises.rmdir(path.join(locationMap.get(link.source)!, "node_modules"), { recursive: true});
       await fs.promises.mkdir(
-        path.dirname(path.join(location, link.source, "node_modules", name)),
+        path.dirname(path.join(locationMap.get(link.source)!, "node_modules", name)),
         { recursive: true }
       );
       await fs.promises.symlink(
-        path.join(location, link.target),
-        path.join(location, link.source, "node_modules", name),
+        locationMap.get(link.target)!,
+        path.join(locationMap.get(link.source)!, "node_modules", name),
         "junction"
       );
     })
@@ -140,16 +149,19 @@ async function linkNodes(graph: Graph, location: string): Promise<void> {
 
 async function installNodesInStore(
   graph: Graph,
-  location: string
+  location: string,
+  locationMap: Map<string, string>
 ): Promise<void> {
-  await Promise.all(
-    graph.nodes.map(async (n) => {
+    for (const n of graph.nodes) {
       const key = n.key;
       const nodeLoc = n.location;
-      await fs.promises.mkdir(path.join(location, key));
-      await copyDir(nodeLoc, path.join(location, key));
-    })
-  );
+      const destination = n.keepInPlace ? n.location : path.join(location, key);
+      if (!n.keepInPlace) {
+        await fs.promises.mkdir(path.join(location, key));
+        await copyDir(nodeLoc, path.join(location, key));
+      }
+      locationMap.set(key, destination)
+    }
 }
 
 async function copyDir(source: string, destination: string): Promise<void> {
@@ -161,10 +173,12 @@ async function copyDir(source: string, destination: string): Promise<void> {
         await fs.promises.mkdir(path.join(destination, e));
         await copyDir(path.join(source, e), path.join(destination, e));
       } else if (stats.isFile()) {
-        await fs.promises.copyFile(
-          path.join(source, e),
-          path.join(destination, e)
-        );
+        if (e !== ".yarn-metadata.json" && e !== ".yarn-tarball.tgz") {
+          await fs.promises.copyFile(
+            path.join(source, e),
+            path.join(destination, e)
+          );
+        }
       }
     })
   );
@@ -253,7 +267,9 @@ function getGraphError(graph: Graph): string | undefined {
 
   const nodesWithInvalidName = graph.nodes.filter(
     (n) =>
-      !/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(n.name)
+      !/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-zA-Z0-9-~][a-zA-Z0-9-._~]*$/.test(
+        n.name
+      )
   );
   if (nodesWithInvalidName.length > 0) {
     return `Package name invalid: "${nodesWithInvalidName[0].name}"`;

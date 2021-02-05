@@ -376,6 +376,27 @@ describe("happy path", () => {
 
     expect(scriptOutput).toBe("Hello from bar");
   });
+  it("Can install packages in place", async () => {
+    const store = directory();
+    const foo = directory();
+    fs.writeFileSync(path.join(foo, "foo.js"), 'console.log("foo")');
+    const bar = directory();
+    fs.writeFileSync(path.join(bar, "bar.js"), 'console.log("bar")');
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: foo },
+        { key: "barkey", name: "bar", location: bar, keepInPlace: true },
+      ],
+      links: [{ source: "barkey", target: "fookey" }],
+    };
+
+    await installLocalStore(graph, store);
+
+    expect(
+      fs.readFileSync(path.join(bar, "node_modules", "foo", "foo.js")).toString()
+    ).toBe('console.log("foo")');
+  });
 });
 
 describe("special-cases", () => {
@@ -570,5 +591,7 @@ describe("special-cases", () => {
 /**
  * Tests to add
  * - Scenarios:
- *   - bin files should be relative path
+ *   - don't copy .yarn-metadata.json and .yarn-tarball.tgz
+ *   - supports inplace install
+ *   - be less strict with package name and allow caps
  */
