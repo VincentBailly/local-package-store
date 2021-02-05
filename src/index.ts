@@ -1,10 +1,102 @@
 import * as fs from "fs";
 import * as path from "path";
+import * as rimraf from "rimraf";
+import * as child_process from "child_process";
+
 const cmdShim: (
   from: string,
   to: string
 ) => Promise<void> = require("cmd-shim");
+const { default: PQueue } = require("p-queue");
+const os = require("os");
 
+const queue = new PQueue({ concurrency: 100 });
+
+
+const { Worker } = require('worker_threads');
+function spawnWorker() {
+    return new Worker(require('path').join(__dirname, '..', 'copy.js'));
+}
+
+const numberOfWorkers = process.env.WORKERS_LIMIT ? parseInt(process.env.WORKERS_LIMIT) : Math.ceil(os.cpus().length/ 2)
+
+export function createWorkers() {
+  const workers = [];
+
+  for (let i = 0; i < numberOfWorkers; i++) {
+    const worker = spawnWorker();
+    workers.push(worker);
+  }
+  return workers;
+}
+
+async function copyFiles(fileActions: {src: string, dest: string}[]) {
+  const workers = createWorkers();
+  await new Promise<void>((resolve, reject) => {
+    const split = fileActions
+      .reduce<{src: string, dest: string}[][]>(
+        (acc, curr) => {
+          if (acc[acc.length - 1].length < Math.ceil(fileActions.length / numberOfWorkers)) {
+            acc[acc.length - 1].push(curr);
+          } else {
+            acc.push([curr]);
+          }
+          return acc;
+        },
+        [[]],
+      )
+      .filter(ac => ac && ac.length);
+
+    if (!split.length) {
+      resolve();
+    }
+
+    let running = split.length;
+    split.forEach((ac, i) => {
+      const worker = workers[i];
+      const onError = (err: any) => {
+        worker.off('error', onError);
+        worker.off('close', onError);
+        worker.off('message', onMessage);
+        reject(err && err.err);
+      };
+      const onMessage = () => {
+        worker.off('error', onError);
+        worker.off('close', onError);
+        worker.off('message', onMessage);
+        running -= 1;
+        if (running === 0) {
+          resolve();
+        }
+      };
+      worker.on('error', onError);
+      worker.on('close', onError);
+      worker.on('message', onMessage);
+      const actions = ac.map(action => ({src: action.src, dest: action.dest}));
+      const sp = actions.reduce<{src: string, dest: string}[][]>((acc, curr) => {
+        if (acc[acc.length -1].length < 10) {
+          acc[acc.length -1].push(curr);
+        } else {
+          acc.push([curr]);
+        }
+        return acc
+      }, [[]]);
+      worker.postMessage({actions});
+    });
+  }).finally(() => workers.forEach(w => w.terminate()));
+}
+
+function rmdir(dir: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    rimraf(dir, (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
 /**
  * Dependency graph.
  */
@@ -63,13 +155,37 @@ export async function installLocalStore(
 
   validateInput(graph, location);
 
-  await installNodesInStore(graph, location, locationMap);
+  const filesActions: {src: string, dest: string}[] = [];
+  await installNodesInStore(graph, location, locationMap, filesActions);
+  await copyFiles(filesActions);
 
   const newGraph = addSelfLinks(graph);
 
   await linkNodes(newGraph, location, locationMap);
 
   await createBins(newGraph, location, locationMap);
+
+  await runScripts(newGraph, location, locationMap);
+}
+
+async function runScripts(graph: Graph, location: string, locationMap: Map<string, string>): Promise<void> {
+  await Promise.all(graph.nodes.map(async n => {
+    let manifest: any = {};
+    try {
+      manifest = JSON.parse((await fs.promises.readFile(path.join(n.location, "package.json"))).toString());
+    } catch {}
+    if (manifest && manifest.scripts && manifest.scripts.postinstall) {
+      await new Promise<void>((resolve, reject) => {
+        const child = child_process.exec("npm run postinstall", { cwd: locationMap.get(n.key) });
+        child.on("exit", () => {
+          resolve()
+        })
+        child.on("error", (e) => {
+          reject(e)
+        });
+      });
+    }
+  }))
 }
 
 function addSelfLinks(graph: Graph): Graph {
@@ -83,7 +199,11 @@ function addSelfLinks(graph: Graph): Graph {
   return newGraph;
 }
 
-async function createBins(graph: Graph, location: string, locationMap: Map<string, string>): Promise<void> {
+async function createBins(
+  graph: Graph,
+  location: string,
+  locationMap: Map<string, string>
+): Promise<void> {
   const binsMap = new Map<string, Map<string, string>>();
 
   graph.nodes.forEach((n) => {
@@ -122,26 +242,35 @@ async function createBins(graph: Graph, location: string, locationMap: Map<strin
           ".bin",
           binName
         );
-        await cmdShim(binLoc, binLink);
+        await queue.add(() => cmdShim(binLoc, binLink));
       }
     })
   );
 }
 
-async function linkNodes(graph: Graph, location: string, locationMap: Map<string, string>): Promise<void> {
+async function linkNodes(
+  graph: Graph,
+  location: string,
+  locationMap: Map<string, string>
+): Promise<void> {
   await Promise.all(
     graph.links.map(async (link) => {
       // TODO: this is very bad for perf, improve this.
       const name = graph.nodes.find((n) => n.key === link.target)!.name;
-      await fs.promises.rmdir(path.join(locationMap.get(link.source)!, "node_modules"), { recursive: true});
-      await fs.promises.mkdir(
-        path.dirname(path.join(locationMap.get(link.source)!, "node_modules", name)),
-        { recursive: true }
+      await queue.add(() =>
+        fs.promises.mkdir(
+          path.dirname(
+            path.join(locationMap.get(link.source)!, "node_modules", name)
+          ),
+          { recursive: true }
+        )
       );
-      await fs.promises.symlink(
-        locationMap.get(link.target)!,
-        path.join(locationMap.get(link.source)!, "node_modules", name),
-        "junction"
+      await queue.add(() =>
+        fs.promises.symlink(
+          locationMap.get(link.target)!,
+          path.join(locationMap.get(link.source)!, "node_modules", name),
+          "junction"
+        )
       );
     })
   );
@@ -150,33 +279,39 @@ async function linkNodes(graph: Graph, location: string, locationMap: Map<string
 async function installNodesInStore(
   graph: Graph,
   location: string,
-  locationMap: Map<string, string>
+  locationMap: Map<string, string>,
+  filesActions: {src: string, dest: string}[]
 ): Promise<void> {
-    for (const n of graph.nodes) {
+  await Promise.all(
+    graph.nodes.map(async (n) => {
       const key = n.key;
       const nodeLoc = n.location;
       const destination = n.keepInPlace ? n.location : path.join(location, key);
       if (!n.keepInPlace) {
-        await fs.promises.mkdir(path.join(location, key));
-        await copyDir(nodeLoc, path.join(location, key));
+        await queue.add(() => fs.promises.mkdir(path.join(location, key)));
+        await queue.add(() => copyDir(nodeLoc, path.join(location, key), filesActions));
+      } else {
+        await queue.add(() => rmdir(path.join(destination, "node_modules")));
       }
-      locationMap.set(key, destination)
-    }
+      locationMap.set(key, destination);
+    })
+  );
 }
 
-async function copyDir(source: string, destination: string): Promise<void> {
+async function copyDir(source: string, destination: string,
+  filesActions: {src: string, dest: string}[]): Promise<void> {
   const entries = fs.readdirSync(source);
   await Promise.all(
     entries.map(async (e) => {
       const stats = await fs.promises.stat(path.join(source, e));
       if (stats.isDirectory()) {
         await fs.promises.mkdir(path.join(destination, e));
-        await copyDir(path.join(source, e), path.join(destination, e));
+        await copyDir(path.join(source, e), path.join(destination, e), filesActions);
       } else if (stats.isFile()) {
         if (e !== ".yarn-metadata.json" && e !== ".yarn-tarball.tgz") {
-          await fs.promises.copyFile(
-            path.join(source, e),
-            path.join(destination, e)
+          filesActions.push(
+            {src: path.join(source, e),
+            dest: path.join(destination, e)}
           );
         }
       }
@@ -238,9 +373,9 @@ function getBinError(graph: Graph): string | undefined {
     const targetBins = binsMap.get(target)!;
     targetBins.forEach((binName) => {
       if (installedBinMap.get(source)!.has(binName)) {
-        binCollisionErrors.push(
+        /*  binCollisionErrors.push(
           `Several different scripts called "${binName}" need to be installed at the same location (${source}).`
-        );
+        );*/
       }
       installedBinMap.get(source)!.add(binName);
     });

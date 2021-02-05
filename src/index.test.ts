@@ -397,6 +397,25 @@ describe("happy path", () => {
       fs.readFileSync(path.join(bar, "node_modules", "foo", "foo.js")).toString()
     ).toBe('console.log("foo")');
   });
+  it("Run postinstall scripts", async () => {
+    const store = directory();
+    const foo = directory();
+    fs.writeFileSync(path.join(foo, "foo.js"), 'require("fs").writeFileSync("postinstall", "postinstall");');
+    fs.writeFileSync(path.join(foo, "package.json"), '{"scripts": { "postinstall": "node foo.js" } }')
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: foo }
+      ],
+      links: [],
+    };
+
+    await installLocalStore(graph, store);
+
+    expect(
+      fs.readFileSync(path.join(store, "fookey", "postinstall")).toString()
+    ).toBe('postinstall');
+  })
 });
 
 describe("special-cases", () => {
@@ -592,6 +611,7 @@ describe("special-cases", () => {
  * Tests to add
  * - Scenarios:
  *   - don't copy .yarn-metadata.json and .yarn-tarball.tgz
- *   - supports inplace install
  *   - be less strict with package name and allow caps
+ *   - inplace packages are cleaned up before being linked
+ *   - scripts are run
  */
