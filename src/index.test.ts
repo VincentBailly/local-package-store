@@ -376,6 +376,48 @@ describe("happy path", () => {
 
     expect(scriptOutput).toBe("Hello from bar");
   });
+  it("Can install packages in place", async () => {
+    const store = directory();
+    const foo = directory();
+    fs.writeFileSync(path.join(foo, "foo.js"), 'console.log("foo")');
+    const bar = directory();
+    fs.writeFileSync(path.join(bar, "bar.js"), 'console.log("bar")');
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: foo },
+        { key: "barkey", name: "bar", location: bar, keepInPlace: true },
+      ],
+      links: [{ source: "barkey", target: "fookey" }],
+    };
+
+    await installLocalStore(graph, store);
+
+    expect(
+      fs
+        .readFileSync(path.join(bar, "node_modules", "foo", "foo.js"))
+        .toString()
+    ).toBe('console.log("foo")');
+  });
+  it("cleans node_module folder of local packages", async () => {
+    const store = directory();
+    const foo = directory();
+    fs.mkdirSync(path.join(foo, "node_modules"));
+    fs.writeFileSync(path.join(foo, "node_modules", "touch"), 'touch');
+
+    const graph = {
+      nodes: [
+        { key: "fookey", name: "foo", location: foo, keepInPlace: true },
+      ],
+      links: [],
+    };
+
+    await installLocalStore(graph, store);
+
+    await expect(
+      fs.promises.stat(path.join(foo, "node_modules", "touch"))
+    ).rejects.toThrow();
+  });
 });
 
 describe("special-cases", () => {
@@ -404,12 +446,21 @@ describe("special-cases", () => {
         { key: "fookey", name: "@namespace/foo", location: foo },
         { key: "barkey", name: "bar", location: emptyFolder },
       ],
-      links: [{source: "barkey", target: "fookey"}],
+      links: [{ source: "barkey", target: "fookey" }],
     };
 
     await installLocalStore(graph, store);
 
-    await fs.promises.stat(path.join(store, "barkey", "node_modules", "@namespace", "foo", "index.js"))
+    await fs.promises.stat(
+      path.join(
+        store,
+        "barkey",
+        "node_modules",
+        "@namespace",
+        "foo",
+        "index.js"
+      )
+    );
   });
   it("installs bins that are in a nested folder", async () => {
     const store = directory();
@@ -428,7 +479,12 @@ describe("special-cases", () => {
     const graph = {
       nodes: [
         { key: "fookey", name: "foo", location: foo },
-        { key: "barkey", name: "bar", bins: { bar: "./sub/myBin" }, location: bar },
+        {
+          key: "barkey",
+          name: "bar",
+          bins: { bar: "./sub/myBin" },
+          location: bar,
+        },
       ],
       links: [{ source: "fookey", target: "barkey" }],
     };
@@ -441,52 +497,49 @@ describe("special-cases", () => {
     }).trim();
 
     expect(scriptOutput).toBe("Hello from bar");
-  })
+  });
   it("always add a dependency from a package to itself", async () => {
     const store = directory();
     const foo = directory();
-    await fs.promises.writeFile(
-      path.join(foo, "index.js"), "");
+    await fs.promises.writeFile(path.join(foo, "index.js"), "");
 
     const graph = {
-      nodes: [
-        { key: "fookey", name: "foo", location: foo }
-      ],
+      nodes: [{ key: "fookey", name: "foo", location: foo }],
       links: [],
     };
 
     await installLocalStore(graph, store);
 
-    await fs.promises.stat(path.join(store, "fookey", "node_modules", "foo", "index.js"))
-  })
+    await fs.promises.stat(
+      path.join(store, "fookey", "node_modules", "foo", "index.js")
+    );
+  });
   it("allows dependencies to self to be declared explicitely", async () => {
     const store = directory();
 
     const graph = {
-      nodes: [
-        { key: "fookey", name: "foo", location: emptyFolder }
-      ],
-      links: [ {source: "fookey", target: "fookey"}],
+      nodes: [{ key: "fookey", name: "foo", location: emptyFolder }],
+      links: [{ source: "fookey", target: "fookey" }],
     };
 
     await installLocalStore(graph, store);
-
-  })
+  });
   it("allows circular dependencies", async () => {
     const store = directory();
 
     const graph = {
       nodes: [
         { key: "fookey", name: "foo", location: emptyFolder },
-        { key: "barkey", name: "bar", location: emptyFolder }
+        { key: "barkey", name: "bar", location: emptyFolder },
       ],
-      links: [ {source: "fookey", target: "barkey"},
-    {source: "barkey", target: "fookey"}],
+      links: [
+        { source: "fookey", target: "barkey" },
+        { source: "barkey", target: "fookey" },
+      ],
     };
 
     await installLocalStore(graph, store);
-
-  })
+  });
   it("installs bins in owner's package", async () => {
     const store = directory();
     const foo = directory();
@@ -514,57 +567,66 @@ describe("special-cases", () => {
     }).trim();
 
     expect(scriptOutput).toBe("Hello from foo");
-  })
+  });
   it("allows package with a namespace to depend on themselves.", async () => {
     const store = directory();
     const foo = directory();
-    await fs.promises.writeFile(
-      path.join(foo, "package.json"),
-      '{}'
-    );
+    await fs.promises.writeFile(path.join(foo, "package.json"), "{}");
 
     const graph = {
-      nodes: [
-        { key: "fookey", name: "@name/foo", location: foo }
-      ],
-      links: [ {source: "fookey", target: "fookey"}],
+      nodes: [{ key: "fookey", name: "@name/foo", location: foo }],
+      links: [{ source: "fookey", target: "fookey" }],
     };
 
     await installLocalStore(graph, store);
 
-    await fs.promises.stat(path.join(store, "fookey", "node_modules", "@name", "foo", "package.json"))
-  })
+    await fs.promises.stat(
+      path.join(store, "fookey", "node_modules", "@name", "foo", "package.json")
+    );
+  });
   it("installs bins in owner's package", async () => {
     const store = directory();
 
     const graph = {
       nodes: [
-        { key: "fookey", name: "foo", bins: { foo: "./myBin" }, location: emptyFolder },
+        {
+          key: "fookey",
+          name: "foo",
+          bins: { foo: "./myBin" },
+          location: emptyFolder,
+        },
       ],
       links: [],
     };
 
     await installLocalStore(graph, store);
-  })
+  });
   it("absolute bin path are ignored", async () => {
     const store = directory();
     const foo = directory();
-    await fs.promises.writeFile(
-      path.join(foo, "index.js"), "");
-
+    await fs.promises.writeFile(path.join(foo, "index.js"), "");
 
     const graph = {
       nodes: [
-        { key: "fookey", name: "foo", bins: { foo: path.join(foo, "index.js") }, location: foo },
-        { key: "barkey", name: "bar", location: emptyFolder }
+        {
+          key: "fookey",
+          name: "foo",
+          bins: { foo: path.join(foo, "index.js") },
+          location: foo,
+        },
+        { key: "barkey", name: "bar", location: emptyFolder },
       ],
-      links: [ { source: "barkey", target: "fookey"}],
+      links: [{ source: "barkey", target: "fookey" }],
     };
 
     await installLocalStore(graph, store);
 
-    await expect(fs.promises.stat(path.join(store, "barkey", "node_modules", ".bin", "foo"))).rejects.toThrow();
-  })
+    await expect(
+      fs.promises.stat(
+        path.join(store, "barkey", "node_modules", ".bin", "foo")
+      )
+    ).rejects.toThrow();
+  });
 });
 
 /**
