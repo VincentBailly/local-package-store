@@ -1,13 +1,14 @@
-Install a local package store for a given dependency graph.
+Install a node dependency tree on disk.
 
-The installation is does using a flat structure where packages are connected with symlinks.
-The package is meant to be used as a component of a package manager.
+The installation is done using a flat folder structure where packages are connected with symlinks.
+This package is meant to be used as a component of a package manager.
 
 Features:
 
 - Install packages in a flat structure.
 - Install bin scripts.
 - Support package names with a namespace.
+- Multiple packages can have the same name (usefull to support various version or conflicting peerDependencies).
 
 Usage:
 ```javascript
@@ -35,5 +36,5 @@ installLocalStore(
 ```
 
 The inputs are:
-- The location of a store. This is where the packages will be installed on disk
-- The dependency graph of external packages. Contains a list of node and a list of links between the nodes.
+- The dependency graph of packages. Contains a list of packages and a list of dependencies between them.
+- The location of a store. This is where the packages will be installed on disk.
