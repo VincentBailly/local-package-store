@@ -9,5 +9,5 @@
         "outDir": "lib"
 
     },
-    "files": ["src/index.ts"]
+    "files": ["src/index.ts", "src/copy.ts"]
 }

@@ -1,11 +1,100 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as rimraf from "rimraf";
+import { Worker } from "worker_threads";
+import { cpus } from "os";
 
 const cmdShim: (
   from: string,
   to: string
 ) => Promise<void> = require("cmd-shim");
+
+function spawnWorker() {
+  return new Worker(path.join(__dirname, "copy.js"));
+}
+
+const maxWorkers = process.env.WORKERS_LIMIT
+  ? parseInt(process.env.WORKERS_LIMIT)
+  : 999;
+const numberOfWorkers = Math.min(maxWorkers, Math.ceil(cpus().length / 2));
+
+function createWorkers() {
+  const workers = [];
+
+  for (let i = 0; i < numberOfWorkers; i++) {
+    const worker = spawnWorker();
+    workers.push(worker);
+  }
+  return workers;
+}
+
+async function copyFiles(fileActions: { src: string; dest: string }[]) {
+  const workers = createWorkers();
+  await new Promise<void>((resolve, reject) => {
+    const split = fileActions
+      .reduce<{ src: string; dest: string }[][]>(
+        (acc, curr) => {
+          if (
+            acc[acc.length - 1].length <
+            Math.ceil(fileActions.length / numberOfWorkers)
+          ) {
+            acc[acc.length - 1].push(curr);
+          } else {
+            acc.push([curr]);
+          }
+          return acc;
+        },
+        [[]]
+      )
+      .filter((ac) => ac && ac.length);
+
+    if (!split.length) {
+      resolve();
+    }
+
+    let running = 0;
+    split.forEach((ac, i) => {
+      const worker = workers[i];
+      const onError = (err: any) => {
+        worker.off("error", onError);
+        worker.off("close", onError);
+        worker.off("message", onMessage);
+        reject(err && err.err);
+      };
+      const onMessage = () => {
+        worker.off("error", onError);
+        worker.off("close", onError);
+        worker.off("message", onMessage);
+        running -= 1;
+        if (running === 0) {
+          resolve();
+        }
+      };
+      worker.on("error", onError);
+      worker.on("close", onError);
+      worker.on("message", onMessage);
+      const actions = ac.map((action) => ({
+        src: action.src,
+        dest: action.dest,
+      }));
+      const sp = actions.reduce<{ src: string; dest: string }[][]>(
+        (acc, curr) => {
+          if (acc[acc.length - 1].length < 10) {
+            acc[acc.length - 1].push(curr);
+          } else {
+            acc.push([curr]);
+          }
+          return acc;
+        },
+        [[]]
+      );
+      sp.forEach((actions) => {
+        running++;
+        worker.postMessage({ actions });
+      });
+    });
+  }).finally(() => workers.forEach((w) => w.terminate()));
+}
 
 function rmdir(dir: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -77,7 +166,9 @@ export async function installLocalStore(
 
   validateInput(graph, location);
 
-  await installNodesInStore(graph, location, locationMap);
+  const filesActions: { src: string; dest: string }[] = [];
+  await installNodesInStore(graph, location, locationMap, filesActions);
+  await copyFiles(filesActions);
 
   const newGraph = addSelfLinks(graph);
 
@@ -156,7 +247,9 @@ async function linkNodes(
       // TODO: this is very bad for perf, improve this.
       const name = graph.nodes.find((n) => n.key === link.target)!.name;
       await fs.promises.mkdir(
-        path.dirname(path.join(locationMap.get(link.source)!, "node_modules", name)),
+        path.dirname(
+          path.join(locationMap.get(link.source)!, "node_modules", name)
+        ),
         { recursive: true }
       );
       await fs.promises.symlink(
@@ -172,6 +265,7 @@ async function installNodesInStore(
   graph: Graph,
   location: string,
   locationMap: Map<string, string>,
+  filesActions: { src: string; dest: string }[]
 ): Promise<void> {
   await Promise.all(
     graph.nodes.map(async (n) => {
@@ -180,7 +274,7 @@ async function installNodesInStore(
       const destination = n.keepInPlace ? n.location : path.join(location, key);
       if (!n.keepInPlace) {
         await fs.promises.mkdir(destination);
-        await copyDir(nodeLoc, destination);
+        await copyDir(nodeLoc, destination, filesActions);
       } else {
         await rmdir(path.join(destination, "node_modules"));
       }
@@ -189,19 +283,27 @@ async function installNodesInStore(
   );
 }
 
-async function copyDir(source: string, destination: string): Promise<void> {
+async function copyDir(
+  source: string,
+  destination: string,
+  filesActions: { src: string; dest: string }[]
+): Promise<void> {
   const entries = fs.readdirSync(source);
   await Promise.all(
     entries.map(async (e) => {
       const stats = await fs.promises.stat(path.join(source, e));
       if (stats.isDirectory()) {
         await fs.promises.mkdir(path.join(destination, e));
-        await copyDir(path.join(source, e), path.join(destination, e));
-      } else if (stats.isFile()) {
-        await fs.promises.copyFile(
+        await copyDir(
           path.join(source, e),
-          path.join(destination, e)
+          path.join(destination, e),
+          filesActions
         );
+      } else if (stats.isFile()) {
+        filesActions.push({
+          src: path.join(source, e),
+          dest: path.join(destination, e),
+        });
       }
     })
   );

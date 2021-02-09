@@ -403,12 +403,10 @@ describe("happy path", () => {
     const store = directory();
     const foo = directory();
     fs.mkdirSync(path.join(foo, "node_modules"));
-    fs.writeFileSync(path.join(foo, "node_modules", "touch"), 'touch');
+    fs.writeFileSync(path.join(foo, "node_modules", "touch"), "touch");
 
     const graph = {
-      nodes: [
-        { key: "fookey", name: "foo", location: foo, keepInPlace: true },
-      ],
+      nodes: [{ key: "fookey", name: "foo", location: foo, keepInPlace: true }],
       links: [],
     };
 
