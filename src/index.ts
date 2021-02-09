@@ -392,7 +392,9 @@ function getGraphError(graph: Graph): string | undefined {
 
   const nodesWithInvalidName = graph.nodes.filter(
     (n) =>
-      !/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(n.name)
+      !/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-zA-Z0-9-~][a-zA-Z0-9-._~]*$/.test(
+        n.name
+      )
   );
   if (nodesWithInvalidName.length > 0) {
     return `Package name invalid: "${nodesWithInvalidName[0].name}"`;
