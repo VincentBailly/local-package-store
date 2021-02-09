@@ -111,7 +111,7 @@ function rmdir(dir: string): Promise<void> {
 /**
  * Dependency graph.
  */
-export type Graph = {
+export interface Graph {
   /**
    * Nodes of the graph.
    */
@@ -150,7 +150,20 @@ export type Graph = {
      */
     target: string;
   }[];
-};
+}
+
+/**
+ * Options to configure the installLocalStore function.
+ */
+export interface Options {
+  /**
+   * List of file names that should not be copied over from the cache to the store.
+   * This is useful when the cache contains some large files that are not needed in
+   * the store (eg. .yarn-metatdata.json or .yarn-tarball.tgz)
+   */
+
+  filesToExclude: string[];
+}
 
 /**
  * Install the given dependency graph in the given folder.
@@ -160,14 +173,21 @@ export type Graph = {
  */
 export async function installLocalStore(
   graph: Graph,
-  location: string
+  location: string,
+  options?: Options
 ): Promise<void> {
   const locationMap = new Map<string, string>();
 
   validateInput(graph, location);
 
   const filesActions: { src: string; dest: string }[] = [];
-  await installNodesInStore(graph, location, locationMap, filesActions);
+  await installNodesInStore(
+    graph,
+    location,
+    locationMap,
+    filesActions,
+    options?.filesToExclude
+  );
   await copyFiles(filesActions);
 
   const newGraph = addSelfLinks(graph);
@@ -265,7 +285,8 @@ async function installNodesInStore(
   graph: Graph,
   location: string,
   locationMap: Map<string, string>,
-  filesActions: { src: string; dest: string }[]
+  filesActions: { src: string; dest: string }[],
+  exclusionList?: string[]
 ): Promise<void> {
   await Promise.all(
     graph.nodes.map(async (n) => {
@@ -274,7 +295,7 @@ async function installNodesInStore(
       const destination = n.keepInPlace ? n.location : path.join(location, key);
       if (!n.keepInPlace) {
         await fs.promises.mkdir(destination);
-        await copyDir(nodeLoc, destination, filesActions);
+        await copyDir(nodeLoc, destination, filesActions, exclusionList);
       } else {
         await rmdir(path.join(destination, "node_modules"));
       }
@@ -286,7 +307,8 @@ async function installNodesInStore(
 async function copyDir(
   source: string,
   destination: string,
-  filesActions: { src: string; dest: string }[]
+  filesActions: { src: string; dest: string }[],
+  exclusionList?: string[]
 ): Promise<void> {
   const entries = fs.readdirSync(source);
   await Promise.all(
@@ -300,10 +322,12 @@ async function copyDir(
           filesActions
         );
       } else if (stats.isFile()) {
-        filesActions.push({
-          src: path.join(source, e),
-          dest: path.join(destination, e),
-        });
+        if (!exclusionList || !exclusionList.includes(e)) {
+          filesActions.push({
+            src: path.join(source, e),
+            dest: path.join(destination, e),
+          });
+        }
       }
     })
   );

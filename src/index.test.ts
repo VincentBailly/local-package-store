@@ -419,6 +419,24 @@ describe("happy path", () => {
 });
 
 describe("special-cases", () => {
+  it("do not install files explicitly excluded", async () => {
+    const store = directory();
+    const foo = directory();
+    fs.writeFileSync(path.join(foo, "largeUselessFile"), "");
+
+    const graph = {
+      nodes: [{ key: "fookey", name: "foo", location: foo }],
+      links: [],
+    };
+
+    await installLocalStore(graph, store, {
+      filesToExclude: ["largeUselessFile"],
+    });
+
+    await expect(
+      fs.promises.stat(path.join(store, "fookey", "largeUselessFile"))
+    ).rejects.toThrow();
+  });
   it("accept several nodes having the sane name", async () => {
     const store = directory();
 
