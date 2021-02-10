@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as rimraf from "rimraf";
 import { Worker } from "worker_threads";
+import { exec } from "child_process";
 import { cpus } from "os";
 
 const cmdShim: (
@@ -195,6 +196,34 @@ export async function installLocalStore(
   await linkNodes(newGraph, location, locationMap);
 
   await createBins(newGraph, location, locationMap);
+
+  await runScripts(newGraph, locationMap);
+}
+
+async function runScripts(graph: Graph, locationMap: Map<string, string>): Promise<void> {
+  await Promise.all(graph.nodes.map(async n => {
+    const loc = locationMap.get(n.key)!;
+    try {
+      fs.statSync(path.join(loc, "package.json"));
+    } catch {
+      return;
+    }
+    const manifest: any = JSON.parse(await fs.promises.readFile(path.join(loc, "package.json"), { encoding: "utf8" }));
+    if (manifest.scripts && manifest.scripts.install) {
+      await new Promise<void>((resolve, reject) => {
+        const child = exec("npm run install", { cwd: loc });
+        child.on("exit", () => resolve());
+        child.on("error", (e) => reject(e));
+      })
+    }
+    if (manifest.scripts && manifest.scripts.postinstall) {
+      await new Promise<void>((resolve, reject) => {
+        const child = exec("npm run postinstall", { cwd: loc });
+        child.on("exit", () => resolve());
+        child.on("error", (e) => reject(e));
+      })
+    }
+  }));
 }
 
 function addSelfLinks(graph: Graph): Graph {

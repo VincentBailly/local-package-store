@@ -416,6 +416,29 @@ describe("happy path", () => {
       fs.promises.stat(path.join(foo, "node_modules", "touch"))
     ).rejects.toThrow();
   });
+  it("Runs postinstall scripts", async () => {
+    const store = directory();
+    const foo = directory();
+    fs.writeFileSync(
+      path.join(foo, "foo.js"),
+      'require("fs").writeFileSync("postinstall", "postinstall");'
+    );
+    fs.writeFileSync(
+      path.join(foo, "package.json"),
+      '{"scripts": { "postinstall": "node foo.js" } } '
+    );
+
+    const graph = {
+      nodes: [{ key: "fookey", name: "foo", location: foo }],
+      links: [],
+    };
+
+    await installLocalStore(graph, store);
+
+    expect(
+      fs.readFileSync(path.join(store, "fookey", "postinstall")).toString()
+    ).toBe("postinstall");
+  });
 });
 
 describe("special-cases", () => {
@@ -648,5 +671,6 @@ describe("special-cases", () => {
 /**
  * Tests to add
  * - Scenarios:
- *   - bin files should be relative path
+ *   - preinstall scripts should be run
+ *   - postinstall scripts should run in dependency order
  */
