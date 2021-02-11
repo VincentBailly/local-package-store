@@ -5,6 +5,10 @@ import { Worker } from "worker_threads";
 import { exec } from "child_process";
 import { cpus } from "os";
 
+import PQueue from 'p-queue';
+ 
+const queue = new PQueue({concurrency: 300});
+
 const cmdShim: (
   from: string,
   to: string
@@ -63,11 +67,11 @@ async function copyFiles(fileActions: { src: string; dest: string }[]) {
         reject(err && err.err);
       };
       const onMessage = () => {
-        worker.off("error", onError);
-        worker.off("close", onError);
-        worker.off("message", onMessage);
         running -= 1;
         if (running === 0) {
+          workers.forEach(worker => worker.off("error", onError));
+          workers.forEach(worker => worker.off("close", onError));
+          workers.forEach(worker => worker.off("message", onMessage));
           resolve();
         }
       };
@@ -80,7 +84,7 @@ async function copyFiles(fileActions: { src: string; dest: string }[]) {
       }));
       const sp = actions.reduce<{ src: string; dest: string }[][]>(
         (acc, curr) => {
-          if (acc[acc.length - 1].length < 10) {
+          if (acc[acc.length - 1].length < 100) {
             acc[acc.length - 1].push(curr);
           } else {
             acc.push([curr]);
@@ -280,7 +284,7 @@ async function createBins(
           ".bin",
           binName
         );
-        await cmdShim(binLoc, binLink);
+        await queue.add(() => cmdShim(binLoc, binLink));
       }
     })
   );
