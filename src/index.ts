@@ -5,9 +5,10 @@ import { Worker } from "worker_threads";
 import { exec } from "child_process";
 import { cpus } from "os";
 
-import PQueue from 'p-queue';
- 
-const queue = new PQueue({concurrency: 300});
+import PQueue from "p-queue";
+
+const queue = new PQueue({ concurrency: 300 });
+const toRemove: string[] = [];
 
 const cmdShim: (
   from: string,
@@ -69,11 +70,11 @@ async function copyFiles(fileActions: { src: string; dest: string }[]) {
       const onMessage = () => {
         running -= 1;
         if (running === 0) {
-          workers.forEach(worker => worker.off("error", onError));
-          workers.forEach(worker => worker.off("close", onError));
-          workers.forEach(worker => worker.off("message", onMessage));
           resolve();
         }
+        worker.off("error", onError);
+        worker.off("close", onError);
+        worker.off("message", onMessage);
       };
       worker.on("error", onError);
       worker.on("close", onError);
@@ -82,21 +83,9 @@ async function copyFiles(fileActions: { src: string; dest: string }[]) {
         src: action.src,
         dest: action.dest,
       }));
-      const sp = actions.reduce<{ src: string; dest: string }[][]>(
-        (acc, curr) => {
-          if (acc[acc.length - 1].length < 100) {
-            acc[acc.length - 1].push(curr);
-          } else {
-            acc.push([curr]);
-          }
-          return acc;
-        },
-        [[]]
-      );
-      sp.forEach((actions) => {
-        running++;
-        worker.postMessage({ actions });
-      });
+
+      running++;
+      worker.postMessage({ actions });
     });
   }).finally(() => workers.forEach((w) => w.terminate()));
 }
@@ -201,37 +190,52 @@ export async function installLocalStore(
 
   const newGraph = addSelfLinks(graph);
 
+
+
+  async function doLink():Promise<void> {
   await linkNodes(newGraph, location, locationMap);
 
   await createBins(newGraph, location, locationMap);
 
   await runScripts(newGraph, locationMap);
+  }
+  await Promise.all([...toRemove.map(rmdir), doLink()])
+
 }
 
-async function runScripts(graph: Graph, locationMap: Map<string, string>): Promise<void> {
-  await Promise.all(graph.nodes.map(async n => {
-    const loc = locationMap.get(n.key)!;
-    try {
-      fs.statSync(path.join(loc, "package.json"));
-    } catch {
-      return;
-    }
-    const manifest: any = JSON.parse(await fs.promises.readFile(path.join(loc, "package.json"), { encoding: "utf8" }));
-    if (manifest.scripts && manifest.scripts.install) {
-      await new Promise<void>((resolve, reject) => {
-        const child = exec("npm run install", { cwd: loc });
-        child.on("exit", () => resolve());
-        child.on("error", (e) => reject(e));
-      })
-    }
-    if (manifest.scripts && manifest.scripts.postinstall) {
-      await new Promise<void>((resolve, reject) => {
-        const child = exec("npm run postinstall", { cwd: loc });
-        child.on("exit", () => resolve());
-        child.on("error", (e) => reject(e));
-      })
-    }
-  }));
+async function runScripts(
+  graph: Graph,
+  locationMap: Map<string, string>
+): Promise<void> {
+  await Promise.all(
+    graph.nodes.map(async (n) => {
+      const loc = locationMap.get(n.key)!;
+      try {
+        fs.statSync(path.join(loc, "package.json"));
+      } catch {
+        return;
+      }
+      const manifest: any = JSON.parse(
+        await fs.promises.readFile(path.join(loc, "package.json"), {
+          encoding: "utf8",
+        })
+      );
+      if (manifest.scripts && manifest.scripts.install) {
+        await new Promise<void>((resolve, reject) => {
+          const child = exec("npm run install", { cwd: loc });
+          child.on("exit", () => resolve());
+          child.on("error", (e) => reject(e));
+        });
+      }
+      if (manifest.scripts && manifest.scripts.postinstall) {
+        await new Promise<void>((resolve, reject) => {
+          const child = exec("npm run postinstall", { cwd: loc });
+          child.on("exit", () => resolve());
+          child.on("error", (e) => reject(e));
+        });
+      }
+    })
+  );
 }
 
 function addSelfLinks(graph: Graph): Graph {
@@ -334,7 +338,21 @@ async function installNodesInStore(
         await fs.promises.mkdir(destination);
         await copyDir(nodeLoc, destination, filesActions, exclusionList);
       } else {
-        await rmdir(path.join(destination, "node_modules"));
+        let node_modules_exists = false;
+        try {
+          await fs.promises.stat(path.join(destination, "node_modules"));
+          node_modules_exists = true;
+        } catch {}
+        
+        if (node_modules_exists) {
+          //try {
+          await fs.promises.rename(path.join(destination, "node_modules"), path.join(destination, "node_modules.trash"));
+          toRemove.push(path.join(destination, "node_modules.trash"));
+          /*} catch {
+            await rmdir(path.join(destination, "node_modules"))
+          }*/
+
+        }
       }
       locationMap.set(key, destination);
     })
@@ -370,7 +388,11 @@ async function copyDir(
   );
 }
 
-function validateInput(graph: Graph, location: string, ignoreBinConflicts: boolean | undefined): void {
+function validateInput(
+  graph: Graph,
+  location: string,
+  ignoreBinConflicts: boolean | undefined
+): void {
   const locationError = getLocationError(location);
   if (locationError !== undefined) {
     throw new Error(locationError);
@@ -385,7 +407,10 @@ function validateInput(graph: Graph, location: string, ignoreBinConflicts: boole
   }
 }
 
-function getBinError(graph: Graph, ignoreBinConflicts: boolean | undefined): string | undefined {
+function getBinError(
+  graph: Graph,
+  ignoreBinConflicts: boolean | undefined
+): string | undefined {
   const errors = graph.nodes
     .map((node) => {
       if (!node.bins) {
