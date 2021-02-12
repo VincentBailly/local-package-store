@@ -37,7 +37,6 @@ function processQueue(o: { actions: { src: string; dest: string }[] }) {
         if (err) {
           parentPort && parentPort.emit("error", err);
         } else {
-         // console.log("worker done with one file", running)
           running -= 1;
           if (running === 0) {
             parentPort && parentPort.postMessage("");
