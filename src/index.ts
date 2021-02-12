@@ -167,7 +167,11 @@ export interface Options {
    * the store (eg. .yarn-metatdata.json or .yarn-tarball.tgz)
    */
 
-  filesToExclude: string[];
+  filesToExclude?: string[];
+  /**
+   * Fails when two dependencies provide the same bin name.
+   */
+  ignoreBinConflicts?: boolean;
 }
 
 /**
@@ -183,7 +187,7 @@ export async function installLocalStore(
 ): Promise<void> {
   const locationMap = new Map<string, string>();
 
-  validateInput(graph, location);
+  validateInput(graph, location, options?.ignoreBinConflicts);
 
   const filesActions: { src: string; dest: string }[] = [];
   await installNodesInStore(
@@ -366,7 +370,7 @@ async function copyDir(
   );
 }
 
-function validateInput(graph: Graph, location: string): void {
+function validateInput(graph: Graph, location: string, ignoreBinConflicts: boolean | undefined): void {
   const locationError = getLocationError(location);
   if (locationError !== undefined) {
     throw new Error(locationError);
@@ -375,13 +379,13 @@ function validateInput(graph: Graph, location: string): void {
   if (GrapError !== undefined) {
     throw new Error(GrapError);
   }
-  const binError = getBinError(graph);
+  const binError = getBinError(graph, ignoreBinConflicts);
   if (binError !== undefined) {
     throw new Error(binError);
   }
 }
 
-function getBinError(graph: Graph): string | undefined {
+function getBinError(graph: Graph, ignoreBinConflicts: boolean | undefined): string | undefined {
   const errors = graph.nodes
     .map((node) => {
       if (!node.bins) {
@@ -419,7 +423,7 @@ function getBinError(graph: Graph): string | undefined {
   graph.links.forEach(({ source, target }) => {
     const targetBins = binsMap.get(target)!;
     targetBins.forEach((binName) => {
-      if (installedBinMap.get(source)!.has(binName)) {
+      if (installedBinMap.get(source)!.has(binName) && !ignoreBinConflicts) {
         binCollisionErrors.push(
           `Several different scripts called "${binName}" need to be installed at the same location (${source}).`
         );
