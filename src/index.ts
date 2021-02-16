@@ -5,6 +5,8 @@ import { Worker } from "worker_threads";
 import { exec } from "child_process";
 import { cpus } from "os";
 
+export type { Graph } from "./graph";
+
 import PQueue from "p-queue";
 
 const queue = new PQueue({ concurrency: 300 });
@@ -100,50 +102,6 @@ function rmdir(dir: string): Promise<void> {
       }
     });
   });
-}
-
-/**
- * Dependency graph.
- */
-export interface Graph {
-  /**
-   * Nodes of the graph.
-   */
-  nodes: {
-    /**
-     * Unique key for a node.
-     */
-    key: string;
-    /**
-     * Name of the node.
-     */
-    name: string;
-    /**
-     * Use the package in place, do not copy it to the store.
-     */
-    keepInPlace?: boolean;
-    /**
-     * List of the bins provided by this package.
-     */
-    bins?: { [key: string]: string };
-    /**
-     * Absolute path to a folder where the content of this node is stored.
-     */
-    location: string;
-  }[];
-  /**
-   * Links between nodes.
-   */
-  links: {
-    /**
-     * Unique key of the source node.
-     */
-    source: string;
-    /**
-     * Unique key of the target node.
-     */
-    target: string;
-  }[];
 }
 
 /**
