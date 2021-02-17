@@ -5,6 +5,7 @@ import { Worker } from "worker_threads";
 import { exec } from "child_process";
 import { cpus } from "os";
 
+import type { Graph } from "./graph";
 export type { Graph } from "./graph";
 
 import PQueue from "p-queue";
