@@ -5,6 +5,9 @@ import { Worker } from "worker_threads";
 import { exec } from "child_process";
 import { cpus } from "os";
 
+import { convertGraphToTree } from "./graphToTree";
+import { executeTree } from "./treeExecutor";
+
 import type { Graph } from "./graph";
 export type { Graph } from "./graph";
 
@@ -166,6 +169,51 @@ async function runScripts(
   graph: Graph,
   locationMap: Map<string, string>
 ): Promise<void> {
+
+  const tree = convertGraphToTree(graph);
+
+  async function executor(component: number): Promise<void> {
+    const packages = tree.components.get(component)!.keys;
+    await Promise.all(
+      packages.map(async (n) => {
+        const loc = locationMap.get(n)!;
+        try {
+          fs.statSync(path.join(loc, "package.json"));
+        } catch {
+          return;
+        }
+        const manifest: any = JSON.parse(
+          await fs.promises.readFile(path.join(loc, "package.json"), {
+            encoding: "utf8",
+          })
+        );
+        if (manifest.scripts && manifest.scripts.install) {
+          await new Promise<void>((resolve, reject) => {
+            const child = exec("npm run install", { cwd: loc });
+            child.on("exit", () => {
+              console.log("install script done", manifest.name, manifest.version);
+              resolve()
+            });
+            child.on("error", (e) => reject(e));
+          });
+        }
+        if (manifest.scripts && manifest.scripts.postinstall) {
+          await new Promise<void>((resolve, reject) => {
+            const child = exec("npm run postinstall", { cwd: loc });
+            child.on("exit", () => {
+              console.log("postinstall script done", manifest.name, manifest.version);
+              resolve()
+            });
+            child.on("error", (e) => reject(e));
+          });
+        }
+      })
+    );
+  }
+
+
+  await executeTree(tree, executor);
+
   await Promise.all(
     graph.nodes.map(async (n) => {
       const loc = locationMap.get(n.key)!;
