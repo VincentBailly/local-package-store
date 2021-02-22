@@ -263,8 +263,8 @@ async function installNodesInStore(
       } else {
         await fs.promises.mkdir(destination);
         await copyDir(nodeLoc, destination, filesActions, exclusionList);
-        locationMap.set(key, destination);
       }
+      locationMap.set(key, destination);
     })
   );
 }
