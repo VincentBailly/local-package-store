@@ -13,7 +13,6 @@ export type { Graph } from "./graph";
 import PQueue from "p-queue";
 
 const queue = new PQueue({ concurrency: 300 });
-const toRemove: string[] = [];
 
 const cmdShim: (
   from: string,
@@ -76,17 +75,11 @@ export async function installLocalStore(
 
   const newGraph = addSelfLinks(graph);
 
-
-
-  async function doLink():Promise<void> {
   await linkNodes(newGraph, location, locationMap);
 
   await createBins(newGraph, location, locationMap);
 
   await runScripts(newGraph, locationMap);
-  }
-  await Promise.all([...toRemove.map(rmdir), doLink()])
-
 }
 
 async function runScripts(
@@ -265,27 +258,13 @@ async function installNodesInStore(
       const key = n.key;
       const nodeLoc = n.location;
       const destination = n.keepInPlace ? n.location : path.join(location, key);
-      if (!n.keepInPlace) {
+      if (n.keepInPlace) {
+        await rmdir(path.join(destination, "node_modules"));
+      } else {
         await fs.promises.mkdir(destination);
         await copyDir(nodeLoc, destination, filesActions, exclusionList);
-      } else {
-        let node_modules_exists = false;
-        try {
-          await fs.promises.stat(path.join(destination, "node_modules"));
-          node_modules_exists = true;
-        } catch {}
-        
-        if (node_modules_exists) {
-          //try {
-          await fs.promises.rename(path.join(destination, "node_modules"), path.join(destination, "node_modules.trash"));
-          toRemove.push(path.join(destination, "node_modules.trash"));
-          /*} catch {
-            await rmdir(path.join(destination, "node_modules"))
-          }*/
-
-        }
+        locationMap.set(key, destination);
       }
-      locationMap.set(key, destination);
     })
   );
 }
