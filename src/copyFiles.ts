@@ -1,6 +1,5 @@
 
 import { cpus } from "os";
-import * as path from "path";
 import { Worker } from "worker_threads";
 
 const maxWorkers = process.env.WORKERS_LIMIT
@@ -9,7 +8,7 @@ const maxWorkers = process.env.WORKERS_LIMIT
 const numberOfWorkers = Math.min(maxWorkers, Math.ceil(cpus().length / 2));
 
 function spawnWorker() {
-    return new Worker(path.join(__dirname, "copy.js"));
+    return new Worker(`___WORKER___PLACEHOLDER___`, { eval: true });
   }
 
 function createWorkers() {
