@@ -1,37 +1,26 @@
-import { parentPort } from "worker_threads";
 import * as fs from "fs";
 
-parentPort &&
-  parentPort.on(
-    "message",
-    (o: { actions: { src: string; dest: string }[] }) => {
-        processQueue(o);
-    }
-  );
+const worker = require("worker");
 
-function processQueue(o: { actions: { src: string; dest: string }[] }) {
-  try {
-    let running = o.actions.length;
+worker.dedicated({
+  copyFiles(actions: { src: string; dest: string }[]) {
+    try {
+      let running = actions.length;
 
-    // Safety short circuit in case we somehow start a worker with nothing.
-    if (running === 0) {
-      parentPort && parentPort.postMessage("");
-      
-    }
-
-    o.actions.forEach((a) => {
-      fs.copyFile(a.src, a.dest, 0, (err) => {
-        if (err) {
-          parentPort && parentPort.emit("error", err);
-        } else {
-          running -= 1;
-          if (running === 0) {
-            parentPort && parentPort.postMessage("");
+      actions.forEach((a) => {
+        fs.copyFile(a.src, a.dest, 0, (err) => {
+          if (err) {
+            throw err;
+          } else {
+            running -= 1;
+            if (running === 0) {
+              process.exit(0);
+            }
           }
-        }
+        });
       });
-    });
-  } catch (e) {
-    parentPort && parentPort.emit("error", e);
-  }
-}
+    } catch (err) {
+      throw err;
+    }
+  },
+});

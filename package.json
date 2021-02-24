@@ -6,7 +6,7 @@
   "types": "lib/index.d.ts",
   "module": "lib-esm/index.js",
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.esm.json && node inlineWorker.js",
+    "build": "tsc && tsc -p tsconfig.esm.json",
     "format": "prettier --write src/**/*",
     "test": "yarn build && jest"
   },
@@ -26,6 +26,7 @@
     "cmd-shim": "^4.0.2",
     "p-queue": "^6.6.2",
     "rimraf": "^3.0.2",
-    "strongly-connected-components": "^1.0.1"
+    "strongly-connected-components": "^1.0.1",
+    "worker": "^0.4.0"
   }
 }
