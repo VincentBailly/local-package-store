@@ -4,9 +4,8 @@
   "description": "Install a dependency graph on disk.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
-  "module": "lib-esm/index.js",
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.esm.json",
+    "build": "tsc",
     "format": "prettier --write src/**/*",
     "test": "yarn build && jest"
   },
